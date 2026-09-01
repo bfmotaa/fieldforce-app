@@ -1,0 +1,1384 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FieldForce - De Visitas a Insights Accionables</title>
+  <!-- Google Fonts - Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- SheetJS CDN (Excel Uploader) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <!-- FieldForce — config.js and api-service.js load BEFORE app.js -->
+  <script src="config.js?v=3"></script>
+  <script src="api-service.js?v=5"></script>
+  <script src="js/indexed-db.js?v=3"></script>
+  <script src="js/geofence.js?v=3"></script>
+  <script src="js/sync-queue.js?v=5"></script>
+  <!-- MODAL DE CHECK-IN PROMOTOR -->
+  <dialog id="checkin-modal" closedby="none" class="modal-dialog" aria-labelledby="checkin-modal-title">
+    <div class="modal-content" style="max-width: 450px;">
+      <div class="modal-header">
+        <h2 id="checkin-modal-title">Check-in de Visita</h2>
+        <button type="button" class="btn-close-modal" id="btn-close-checkin-modal">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body" style="text-align: center;">
+        <h3 id="checkin-store-name" style="margin-bottom: 5px;">Nombre de Tienda</h3>
+        <p id="checkin-store-address" style="color: var(--neutral-muted); font-size: 0.85rem; margin-bottom: 20px;">Dirección</p>
+        
+        <div id="checkin-loading" style="padding: 20px;">
+          <div class="loader-spinner" style="width: 40px; height: 40px; margin: 0 auto 10px;"></div>
+          <p>Obteniendo ubicación GPS...</p>
+        </div>
+        
+        <div id="checkin-results" class="hidden" style="text-align: left; background: var(--bg-body); padding: 15px; border-radius: 8px;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span style="color: var(--text-muted); font-size: 0.85rem;">Precisión GPS:</span>
+            <strong id="checkin-accuracy">-- m</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span style="color: var(--text-muted); font-size: 0.85rem;">Distancia a tienda:</span>
+            <strong id="checkin-distance">-- m</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+            <span style="color: var(--text-muted); font-size: 0.85rem;">Radio permitido:</span>
+            <strong id="checkin-radius">-- m</strong>
+          </div>
+          
+          <div id="checkin-status-banner" style="text-align: center; padding: 10px; border-radius: 6px; font-weight: 600; margin-bottom: 15px;">
+            Resultado
+          </div>
+          
+          <button type="button" id="btn-confirm-checkin" class="btn btn-primary btn-block hidden">
+            <i data-lucide="check-circle"></i> Continuar Visita
+          </button>
+          
+          <button type="button" id="btn-retry-checkin" class="btn btn-outline btn-block hidden" style="margin-top: 10px;">
+            <i data-lucide="refresh-cw"></i> Volver a intentar ubicación
+          </button>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL DE CREAR / EDITAR TIENDA (ADMIN) -->
+  <dialog id="store-modal" closedby="any" class="modal-dialog" aria-labelledby="store-modal-title">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2 id="store-modal-title">Crear Tienda</h2>
+        <button type="button" class="btn-close-modal" id="btn-close-store-modal">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="store-form">
+          <input type="hidden" id="store-id-input">
+          <div class="form-group hidden" id="admin-store-client-group" style="margin-bottom: 12px; padding: 12px; background: rgba(var(--primary-color-rgb), 0.05); border: 1px dashed var(--primary-color); border-radius: 6px;">
+            <label for="store-client-id" style="color: var(--primary-color);">Cliente (Admin) *</label>
+            <select id="store-client-id" class="form-select" style="width: 100%; border-color: var(--primary-color);">
+              <option value="">Selecciona el cliente al que pertenece la tienda</option>
+            </select>
+          </div>
+          <div class="form-row-2col" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label for="store-code-input">Código de Tienda *</label>
+              <input type="text" id="store-code-input" required>
+            </div>
+            <div class="form-group">
+              <label for="store-chain-input">Cadena *</label>
+              <input type="text" id="store-chain-input" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="store-name-input">Nombre de Tienda *</label>
+            <input type="text" id="store-name-input" required>
+          </div>
+          <div class="form-group">
+            <label for="store-address-input">Dirección</label>
+            <input type="text" id="store-address-input">
+          </div>
+          <div class="form-row-2col" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label for="store-city-input">Ciudad</label>
+              <input type="text" id="store-city-input">
+            </div>
+            <div class="form-group">
+              <label for="store-state-input">Estado</label>
+              <input type="text" id="store-state-input">
+            </div>
+          </div>
+          
+          <div class="separator-text" style="margin: 1.5rem 0 1rem;"><span>Geolocalización Obligatoria</span></div>
+          
+          <div style="margin-bottom: 1rem; text-align: right;">
+            <button type="button" id="btn-use-my-location" class="btn btn-outline" style="padding: 6px 12px; font-size: 0.8rem;">
+              <i data-lucide="crosshair"></i> Usar mi ubicación actual
+            </button>
+          </div>
+          
+          <div class="form-row-2col" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label for="store-lat-input">Latitud *</label>
+              <input type="number" step="any" id="store-lat-input" min="-90" max="90" required>
+            </div>
+            <div class="form-group">
+              <label for="store-lng-input">Longitud *</label>
+              <input type="number" step="any" id="store-lng-input" min="-180" max="180" required>
+            </div>
+            <div class="form-group">
+              <label for="store-radius-input">Radio (m) *</label>
+              <input type="number" id="store-radius-input" min="1" required value="100">
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label for="store-status-input">Estatus</label>
+            <select id="store-status-input" required>
+              <option value="active">Activa</option>
+              <option value="inactive">Inactiva</option>
+            </select>
+          </div>
+          
+          <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+            <button type="button" class="btn btn-secondary" id="btn-cancel-store-modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary" id="btn-save-store">Guardar Tienda</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="app.js?v=5"></script>
+  <!-- App Container -->
+  <div class="app-container">
+    
+    <!-- Top Global Header / Navigation -->
+    <header class="global-header">
+      <div class="header-logo">
+        <div class="logo-icon">
+          <i data-lucide="trending-up"></i>
+        </div>
+        <div class="logo-text">
+          <h1>FieldForce</h1>
+          <span>Convertidor de Visitas en Insights</span>
+        </div>
+      </div>
+      
+      <!-- Role Toggle (The core selector for the MVP demo) -->
+      <nav class="role-selector-container" aria-label="Selector de rol de la aplicación">
+        <div class="role-toggle-bg">
+          <button id="btn-promotor" class="role-btn active" aria-selected="true" role="tab">
+            <i data-lucide="smartphone"></i>
+            <span>Vista Promotor (Móvil)</span>
+          </button>
+          <button id="btn-supervisor" class="role-btn" aria-selected="false" role="tab">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Dashboard Supervisor</span>
+          </button>
+          <button id="btn-planner" class="role-btn" aria-selected="false" role="tab">
+            <i data-lucide="map"></i>
+            <span>Planificador de Rutas</span>
+          </button>
+          <button id="btn-forms" class="role-btn" aria-selected="false" role="tab">
+            <i data-lucide="file-spreadsheet"></i>
+            <span>Formularios</span>
+          </button>
+          <button id="btn-console" class="role-btn" aria-selected="false" role="tab">
+            <i data-lucide="settings"></i>
+            <span>Consola Central</span>
+          </button>
+        </div>
+      </nav>
+      
+      <div class="header-actions">
+        <select id="admin-client-selector" class="form-select hidden" style="margin-right: 12px; background-color: var(--surface-light); color: var(--text-color); border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 6px; font-size: 0.85rem;" title="Seleccionar Cliente Activo">
+          <option value="">Cargando clientes...</option>
+        </select>
+        <div id="user-session-indicator" class="user-session-indicator hidden" style="display: flex; align-items: center; gap: 8px; margin-right: 12px; font-size: 0.85rem; color: var(--neutral-light); font-weight: 500; background: rgba(255,255,255,0.05); padding: 6px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);">
+          <i data-lucide="user" style="width: 14px; height: 14px; color: var(--primary-color);"></i>
+          <span id="user-session-name">Usuario</span>
+        </div>
+        <button id="btn-logout" class="btn btn-secondary-outline hidden" title="Cerrar sesión de usuario">
+          <i data-lucide="log-out"></i>
+          <span class="desktop-only">Cerrar Sesión</span>
+        </button>
+        <button id="btn-reset" class="btn btn-secondary-outline" title="Reiniciar datos de prueba">
+          <i data-lucide="rotate-ccw"></i>
+          <span class="desktop-only">Resetear Demo</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- 0. INICIO DE SESIÓN (LOGIN) -->
+      <section id="view-login" class="view-section" role="tabpanel">
+        <div class="login-wrapper">
+          <div class="login-card card">
+            <div class="login-header">
+              <div class="login-logo-icon">
+                <i data-lucide="trending-up"></i>
+              </div>
+              <h2>Ingresar a FieldForce</h2>
+              <p>Introduce tus credenciales para acceder a tu portal de trabajo</p>
+            </div>
+            
+            <form id="login-form">
+              <div class="form-group">
+                <label for="login-username">Usuario</label>
+                <div class="input-icon-wrapper">
+                  <i data-lucide="user" class="input-icon"></i>
+                  <input type="text" id="login-username" placeholder="Ej. promotor01" required autocomplete="username">
+                </div>
+              </div>
+              
+              <div class="form-group">
+                <label for="login-password">Contraseña</label>
+                <div class="input-icon-wrapper">
+                  <i data-lucide="lock" class="input-icon"></i>
+                  <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password">
+                </div>
+              </div>
+              
+              <div class="login-error hidden" id="login-error-msg">
+                <i data-lucide="alert-circle"></i>
+                <span id="login-error-text">Usuario o contraseña incorrectos.</span>
+              </div>
+              
+              <button type="submit" class="btn btn-primary btn-block">
+                <i data-lucide="log-in"></i>
+                <span>Iniciar Sesión</span>
+              </button>
+            </form>
+            
+            <!-- Test credentials removed -->
+          </div>
+        </div>
+      </section>
+
+      <!-- 1. VISTA PROMOTOR: SIMULADOR MÓVIL -->
+      <!-- NOTE: 'active' class is intentionally NOT set here. -->
+      <!-- checkAuth() in app.js will add 'active' to the correct view after session check. -->
+      <section id="view-promotor" class="view-section" role="tabpanel">
+        <div class="simulator-wrapper">
+          <div class="phone-frame">
+            <div class="phone-speaker"></div>
+            <div class="phone-screen">
+              
+              <!-- Screen Header -->
+              <div class="screen-header">
+                <div class="promoter-profile-select-container">
+                  <div class="promoter-profile" id="promoter-profile-trigger" role="button" tabindex="0">
+                    <div class="avatar" id="mobile-promoter-avatar">PG</div>
+                    <div class="profile-info">
+                      <div class="promoter-name-wrapper">
+                        <h3 id="mobile-promoter-name">Pedro Gómez</h3>
+                        <i data-lucide="chevron-down" class="chevron-inline"></i>
+                      </div>
+                      <p class="status-badge"><span class="pulse-dot"></span>En Ruta Piloto</p>
+                    </div>
+                  </div>
+                  <!-- Dropdown Menu for Promoters -->
+                  <div class="promoter-dropdown hidden" id="promoter-dropdown-menu">
+                    <!-- Dynamic promoter list rendered in app.js -->
+                  </div>
+                </div>
+                <!-- Date selector container -->
+                <div class="date-selector-container">
+                  <select id="mobile-date-select" class="mobile-date-dropdown">
+                    <option value="2026-05-21">21 May</option>
+                    <option value="2026-05-22">22 May</option>
+                    <option value="2026-05-23">23 May</option>
+                  </select>
+                </div>
+              </div>
+              
+              <!-- Screen Body (Dynamic Content Container) -->
+              <div class="screen-body" id="mobile-screen-body">
+                
+                <!-- ROUTE LIST SCREEN (Default) -->
+                <div id="screen-route-list" class="mobile-screen active">
+                  <div class="screen-title-section">
+                    <h2>Tu Ruta del Día</h2>
+                    <p>Completa las visitas para generar insights comerciales.</p>
+                  </div>
+                  
+                  <!-- Progress Bar -->
+                  <div class="route-progress-container">
+                    <div class="progress-info">
+                      <span>Progreso de Ruta</span>
+                      <strong id="route-progress-text">0 / 3 Tiendas</strong>
+                    </div>
+                    <div class="progress-bar-bg">
+                      <div class="progress-bar-fill" id="route-progress-fill" style="width: 0%"></div>
+                    </div>
+                  </div>
+                  
+                  <!-- Stores List -->
+                  <div class="stores-list" id="stores-list-container">
+                    <!-- Dynamic rendering in app.js -->
+                  </div>
+                  
+                  <!-- Demo Tip -->
+                  <div class="mobile-tip-card">
+                    <i data-lucide="lightbulb" class="tip-icon"></i>
+                    <div>
+                      <h4>Posicionamiento de Valor</h4>
+                      <p>FieldForce valida tus datos al instante y alerta al equipo comercial de inmediato ante cualquier incidencia.</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- STORE CAPTURE SCREEN (Opened on store click) -->
+                <div id="screen-store-capture" class="mobile-screen">
+                  <!-- Navigation back button -->
+                  <button id="btn-back-to-route" class="btn-back">
+                    <i data-lucide="arrow-left"></i>
+                    <span>Volver a la ruta</span>
+                  </button>
+                  
+                  <div class="store-info-banner">
+                    <h2 id="capture-store-name">Walmart Express Satélite</h2>
+                    <p id="capture-store-address"><i data-lucide="map-pin"></i> Av. Lomas Verdes 120, CDMX</p>
+                  </div>
+                  
+                  <!-- Attendance / Check-In Status -->
+                  <div class="check-in-panel card">
+                    <div class="attendance-status" id="attendance-status-text">
+                      <i data-lucide="clock" class="text-warning"></i>
+                      <span>Requiere Check-In para iniciar tareas</span>
+                    </div>
+                    
+                    <!-- GPS Simulator Widget -->
+                    <div class="gps-simulator-widget" id="gps-simulator-container">
+                      <span class="gps-simulator-label"><i data-lucide="cpu" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-right:2px;"></i> Ubicación de Promotor:</span>
+                      <div class="gps-toggle-group">
+                        <button type="button" class="gps-toggle-btn active" id="btn-gps-in-range" data-mode="in-range">
+                          <i data-lucide="map-pin"></i> En Tienda
+                        </button>
+                        <button type="button" class="gps-toggle-btn" id="btn-gps-out-of-range" data-mode="out-of-range">
+                          <i data-lucide="navigation-off"></i> Distante
+                        </button>
+                      </div>
+                      <div class="gps-coordinates-display">
+                        <span>Lat/Lng actual:</span>
+                        <code id="simulated-gps-coords">Detectando...</code>
+                      </div>
+                    </div>
+
+                    <button id="btn-check-in" class="btn btn-primary btn-block">
+                      <i data-lucide="play"></i>
+                      <span>Registrar Entrada (Check-In)</span>
+                    </button>
+                    <div id="check-in-details" class="check-in-details hidden">
+                      <p><i data-lucide="check-circle" class="text-success"></i> Entrada: <strong id="check-in-time">09:15 AM</strong></p>
+                      <p><i data-lucide="navigation" class="text-success"></i> GPS: <strong id="check-in-gps">19.4326, -99.1332</strong></p>
+                    </div>
+                  </div>
+                  
+                  <!-- Task Sections (Hidden until Check-in) -->
+                  <div id="store-tasks-container" class="store-tasks-disabled">
+                    <div class="tasks-overlay">
+                      <i data-lucide="lock"></i>
+                      <p>Haz Check-In para desbloquear las tareas</p>
+                    </div>
+                    
+                    <form id="field-capture-form">
+                      <!-- Dynamic Form Container for Custom Forms -->
+                      <div id="dynamic-form-container" class="hidden"></div>
+                      
+                      <!-- Task 1: KPI Survey -->
+                      <div class="task-card card">
+                        <div class="task-card-header">
+                          <span class="task-num">1</span>
+                          <h3>Encuesta de KPIs Clave</h3>
+                        </div>
+                        <p class="task-desc">Ingresa existencias y precio actual de los productos piloto.</p>
+                        
+                        <div class="product-inputs-list">
+                          
+                          <!-- Product Item: Coca-Cola -->
+                          <div class="product-input-row" data-product-id="prod-coca">
+                            <div class="product-meta">
+                              <h4>Coca-Cola 600ml</h4>
+                              <span class="product-srp">Sugerido: $18.50 | Min: $16.00</span>
+                            </div>
+                            <div class="input-grid">
+                              <div class="form-group">
+                                <label for="coca-stock">Inventario (pzs)</label>
+                                <input type="number" id="coca-stock" name="coca_stock" min="0" placeholder="0" required disabled>
+                              </div>
+                              <div class="form-group">
+                                <label for="coca-price">Precio ($)</label>
+                                <input type="number" id="coca-price" name="coca_price" min="0" step="0.5" placeholder="0.00" required disabled>
+                                <span class="input-inline-alert" id="coca-price-alert"></span>
+                              </div>
+                            </div>
+                            <div class="form-group-checkbox">
+                              <input type="checkbox" id="coca-oos" name="coca_oos" disabled>
+                              <label for="coca-oos">Reportar Agotado (Stockout)</label>
+                            </div>
+                          </div>
+                          
+                          <!-- Product Item: Sprite -->
+                          <div class="product-input-row" data-product-id="prod-sprite">
+                            <div class="product-meta">
+                              <h4>Sprite 600ml</h4>
+                              <span class="product-srp">Sugerido: $17.00 | Min: $15.00</span>
+                            </div>
+                            <div class="input-grid">
+                              <div class="form-group">
+                                <label for="sprite-stock">Inventario (pzs)</label>
+                                <input type="number" id="sprite-stock" name="sprite_stock" min="0" placeholder="0" required disabled>
+                              </div>
+                              <div class="form-group">
+                                <label for="sprite-price">Precio ($)</label>
+                                <input type="number" id="sprite-price" name="sprite_price" min="0" step="0.5" placeholder="0.00" required disabled>
+                                <span class="input-inline-alert" id="sprite-price-alert"></span>
+                              </div>
+                            </div>
+                            <div class="form-group-checkbox">
+                              <input type="checkbox" id="sprite-oos" name="sprite_oos" disabled>
+                              <label for="sprite-oos">Reportar Agotado (Stockout)</label>
+                            </div>
+                          </div>
+                          
+                          <!-- Product Item: Agua Ciel -->
+                          <div class="product-input-row" data-product-id="prod-ciel">
+                            <div class="product-meta">
+                              <h4>Agua Ciel 1L</h4>
+                              <span class="product-srp">Sugerido: $13.00 | Min: $11.00</span>
+                            </div>
+                            <div class="input-grid">
+                              <div class="form-group">
+                                <label for="ciel-stock">Inventario (pzs)</label>
+                                <input type="number" id="ciel-stock" name="ciel_stock" min="0" placeholder="0" required disabled>
+                              </div>
+                              <div class="form-group">
+                                <label for="ciel-price">Precio ($)</label>
+                                <input type="number" id="ciel-price" name="ciel_price" min="0" step="0.5" placeholder="0.00" required disabled>
+                                <span class="input-inline-alert" id="ciel-price-alert"></span>
+                              </div>
+                            </div>
+                            <div class="form-group-checkbox">
+                              <input type="checkbox" id="ciel-oos" name="ciel_oos" disabled>
+                              <label for="ciel-oos">Reportar Agotado (Stockout)</label>
+                            </div>
+                          </div>
+                          
+                        </div>
+                      </div>
+                      
+                      <!-- Task 2: Exhibition & Photo -->
+                      <div class="task-card card">
+                        <div class="task-card-header">
+                          <span class="task-num">2</span>
+                          <h3>Monitoreo de Exhibiciones</h3>
+                        </div>
+                        <p class="task-desc">Evalúa la presencia de exhibición adicional y toma evidencia fotográfica.</p>
+                        
+                        <div class="exhibition-questions">
+                          <div class="form-group-checkbox toggle-switch-group">
+                            <label class="switch-label" for="exh-additional">¿Hay Exhibición Adicional en Tienda?</label>
+                            <label class="switch">
+                              <input type="checkbox" id="exh-additional" name="exh_additional" disabled>
+                              <span class="slider round"></span>
+                            </label>
+                          </div>
+                          
+                          <div class="form-group-checkbox toggle-switch-group">
+                            <label class="switch-label" for="pop-compliance">¿Material POP colocado correctamente?</label>
+                            <label class="switch">
+                              <input type="checkbox" id="pop-compliance" name="pop_compliance" disabled>
+                              <span class="slider round"></span>
+                            </label>
+                          </div>
+                          
+                          <!-- Photo Evidence Upload Component -->
+                          <div class="form-group photo-upload-group">
+                            <label>Evidencia Fotográfica de Exhibición</label>
+                            <div class="photo-dropzone" id="photo-dropzone">
+                              <i data-lucide="camera" class="dropzone-icon"></i>
+                              <p>Arrastra o selecciona foto de exhibición</p>
+                              <span>Formatos JPG, PNG (Max 5MB)</span>
+                              <input type="file" id="photo-file" accept="image/*" class="visually-hidden" disabled>
+                            </div>
+                            
+                            <!-- Preset Sample Selector (For easy demo on both desktop and mobile without taking photos) -->
+                            <div class="sample-photo-selector" id="sample-photo-container">
+                              <p class="sample-label">O usa una foto de muestra para el piloto:</p>
+                              <div class="sample-chips">
+                                <button type="button" class="sample-chip" data-img="shelf-clean" disabled>
+                                  <i data-lucide="image"></i> Anaquel Limpio
+                                </button>
+                                <button type="button" class="sample-chip" data-img="shelf-messy" disabled>
+                                  <i data-lucide="alert-circle"></i> Desordenado
+                                </button>
+                              </div>
+                            </div>
+                            
+                            <!-- Photo Preview -->
+                            <div class="photo-preview-container hidden" id="photo-preview-container">
+                              <img src="" alt="Previsualización de evidencia" id="photo-preview-img">
+                              <button type="button" class="btn-remove-photo" id="btn-remove-photo">
+                                <i data-lucide="trash-2"></i>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <!-- Task 3: Flexible Tasks -->
+                      <div class="task-card card">
+                        <div class="task-card-header">
+                          <span class="task-num">3</span>
+                          <h3>Tarea Flexible: Competencia</h3>
+                        </div>
+                        <p class="task-desc">Chequeo rápido de iniciativas de la competencia principal en tienda.</p>
+                        
+                        <div class="form-group">
+                          <label for="competitor-price">¿Precio observado de Pepsi 600ml?</label>
+                          <input type="number" id="competitor-price" name="competitor_price" min="0" step="0.5" placeholder="0.00" disabled>
+                        </div>
+                        
+                        <div class="form-group">
+                          <label for="competitor-notes">Comentarios / Observaciones en Tienda</label>
+                          <textarea id="competitor-notes" name="competitor_notes" rows="2" placeholder="Ej. Promoción de 2x1 en la entrada de tienda..." disabled></textarea>
+                        </div>
+                      </div>
+                      
+                      <!-- Submit Button -->
+                      <div class="submit-action-panel">
+                        <button type="submit" id="btn-submit-visit" class="btn btn-success btn-block" disabled>
+                          <i data-lucide="check-square"></i>
+                          <span>Finalizar Visita y Enviar Datos</span>
+                        </button>
+                        <p class="submit-warning-text" id="submit-warning">Debes completar los campos obligatorios del check-in e inventario.</p>
+                      </div>
+                    </form>
+                  </div>
+                  
+                </div>
+
+                <!-- Scanner overlay for simulated scanner beep and animation -->
+                <div id="scanner-overlay" class="scanner-overlay hidden">
+                  <div class="scanner-viewfinder">
+                    <div class="scanner-laser"></div>
+                  </div>
+                  <p>Simulando escaneo de código...</p>
+                </div>
+                
+              </div>
+            </div>
+          </div>
+          
+          <!-- Simulator Sidebar Legend (Shows what to do) -->
+          <div class="simulator-instructions">
+            <div class="instructions-card">
+              <h3>📱 Consola de Simulación Móvil</h3>
+              <p>Esta vista representa el dispositivo del promotor de campo en la tienda.</p>
+              
+              <div class="instructions-steps">
+                <div class="step-item">
+                  <div class="step-badge">1</div>
+                  <p>Selecciona una tienda en la lista de la ruta del día.</p>
+                </div>
+                <div class="step-item">
+                  <div class="step-badge">2</div>
+                  <p>Registra la entrada con el botón de <strong>Check-In</strong>.</p>
+                </div>
+                <div class="step-item">
+                  <div class="step-badge">3</div>
+                  <p>Captura los datos. Prueba ingresando valores inusuales (como precio de <strong>$5.00</strong>) para ver alertas instantáneas.</p>
+                </div>
+                <div class="step-item">
+                  <div class="step-badge">4</div>
+                  <p>Finaliza la visita. Los datos serán procesados por el motor de reglas de negocio y se enviarán al servidor ficticio.</p>
+                </div>
+              </div>
+              
+              <div class="instructions-footer-note">
+                <i data-lucide="arrow-right-left"></i>
+                <p>Una vez completada la visita, ¡haz clic en la <strong>Vista Supervisor (Dashboard)</strong> arriba para ver las alertas e insights en tiempo real!</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- 2. VISTA SUPERVISOR: DASHBOARD WEB -->
+      <section id="view-supervisor" class="view-section" role="tabpanel">
+          <!-- Dashboard Top Stats -->
+          <div class="stats-grid">
+            
+            <div class="stat-card card">
+              <div class="stat-icon-wrapper bg-blue-light text-blue">
+                <i data-lucide="check-circle-2"></i>
+              </div>
+              <div class="stat-content">
+                <span>Disponibilidad (Instock)</span>
+                <h2 id="stat-instock">--%</h2>
+                <p class="stat-trend" id="trend-instock">Métrica de Abasto</p>
+              </div>
+            </div>
+            
+            <div class="stat-card card">
+              <div class="stat-icon-wrapper bg-emerald-light text-emerald">
+                <i data-lucide="dollar-sign"></i>
+              </div>
+              <div class="stat-content">
+                <span>Venta Perdida Estimada</span>
+                <h2 id="stat-lost-sales">$0.00 MXN</h2>
+                <p class="stat-trend trend-down" id="trend-lost-sales">Por desabasto de productos</p>
+              </div>
+            </div>
+            
+            <div class="stat-card card">
+              <div class="stat-icon-wrapper bg-indigo-light text-indigo">
+                <i data-lucide="award"></i>
+              </div>
+              <div class="stat-content">
+                <span>Cumplimiento de Precio</span>
+                <h2 id="stat-price-compliance">--%</h2>
+                <p class="stat-trend" id="trend-price-compliance">Alineación con el precio sugerido</p>
+              </div>
+            </div>
+            
+            <div class="stat-card card">
+              <div class="stat-icon-wrapper bg-purple-light text-purple">
+                <i data-lucide="image"></i>
+              </div>
+              <div class="stat-content">
+                <span>Cumplimiento de Exhibición</span>
+                <h2 id="stat-exh-compliance">--%</h2>
+                <p class="stat-trend" id="trend-exh-compliance">Presencia de material POP</p>
+              </div>
+            </div>
+            
+          </div>
+          
+          <!-- Dashboard Core Sections -->
+          <div class="dashboard-layout">
+            
+            <!-- Column 1: Alerts Engine & Activity -->
+            <div class="dashboard-col main-col">
+              
+              <!-- Real-Time Alerts Hub -->
+              <div class="dashboard-panel card">
+                <div class="panel-header">
+                  <div class="panel-title">
+                    <i data-lucide="bell" class="text-orange animate-bounce"></i>
+                    <h2>Centro de Alertas Operativas</h2>
+                    <span class="badge badge-alert" id="alerts-count">0 Alertas</span>
+                  </div>
+                  
+                  <!-- Filters for alerts -->
+                  <div class="filter-pills">
+                    <button class="filter-pill active" data-alert-filter="all">Todas</button>
+                    <button class="filter-pill" data-alert-filter="critical">Críticas</button>
+                    <button class="filter-pill" data-alert-filter="warning">Advertencias</button>
+                    <button class="filter-pill" data-alert-filter="insight">Insights</button>
+                  </div>
+                </div>
+                
+                <!-- Alerts List -->
+                <div class="alerts-list" id="dashboard-alerts-container">
+                  <!-- Alerts are dynamically generated based on rules engine -->
+                </div>
+              </div>
+              
+              <!-- Historical Visits Log -->
+              <div class="dashboard-panel card table-panel">
+                <div class="panel-header">
+                  <div class="panel-title">
+                    <i data-lucide="clipboard-list" class="text-blue"></i>
+                    <h2>Registro de Visitas del Piloto</h2>
+                  </div>
+                  <div class="panel-actions">
+                    <span id="visit-count" class="text-muted">0 visitas hoy</span>
+                  </div>
+                </div>
+                
+                <!-- Visits Table -->
+                <div class="table-responsive">
+                  <table class="visits-table">
+                    <thead>
+                      <tr>
+                        <th>Tienda</th>
+                        <th>Promotor</th>
+                        <th>Check-In</th>
+                        <th>Check-Out</th>
+                        <th>Acciones</th>
+                        <th>Fotos</th>
+                        <th>Detalles</th>
+                        <th>Histórico</th>
+                      </tr>
+                    </thead>
+                    <tbody id="visits-table-body">
+                      <!-- Dynamic rendering of visits -->
+                      <tr>
+                        <td colspan="7" class="text-center text-muted py-4">No se han registrado visitas en el piloto de hoy. Completa una en la Vista Promotor.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              
+            </div>
+            
+            <!-- Column 2: BI Details & Analysis -->
+            <div class="dashboard-col sidebar-col">
+
+              <!-- Store Summary Panel -->
+              <div class="dashboard-panel card">
+                <div class="panel-header">
+                  <div class="panel-title">
+                    <i data-lucide="store" class="text-primary"></i>
+                    <h2>Tiendas del Piloto</h2>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <p class="panel-subtitle">Haz clic en una tienda para ver su histórico completo de visitas.</p>
+                  <div class="stores-summary-list" id="stores-summary-list">
+                    <!-- Generated dynamically -->
+                  </div>
+                </div>
+              </div>
+
+              <!-- Product Stock Status & Weeks of Inventory -->
+              <div class="dashboard-panel card">
+                <div class="panel-header">
+                  <div class="panel-title">
+                    <i data-lucide="package" class="text-indigo"></i>
+                    <h2>Semanas de Inventario (BI)</h2>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <p class="panel-subtitle">Análisis del nivel de stock en el canal de venta frente a las semanas de inventario estimadas (cobertura).</p>
+                  
+                  <div class="inventory-status-list" id="product-coverage-container">
+                    <!-- Generated dynamically in app.js -->
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Flexible Survey Insights -->
+              <div class="dashboard-panel card">
+                <div class="panel-header">
+                  <div class="panel-title">
+                    <i data-lucide="bar-chart-3" class="text-emerald"></i>
+                    <h2>Comparativa con Competencia</h2>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="competitor-comparison">
+                    <div class="competitor-stat-row">
+                      <span class="lbl">Precio Promedio Propio (Coca-Cola 600ml)</span>
+                      <strong id="avg-price-coca">$0.00 MXN</strong>
+                    </div>
+                    <div class="competitor-stat-row">
+                      <span class="lbl">Precio Promedio Pepsi (Competencia)</span>
+                      <strong id="avg-price-pepsi">$0.00 MXN</strong>
+                    </div>
+                    <div class="price-gap-badge" id="price-gap-container">
+                      Gape de precio: --%
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+            </div>
+            
+          </div>
+      </section>
+
+      <!-- 3. PLANIFICADOR DE RUTAS -->
+      <section id="view-planner" class="view-section" role="tabpanel">
+        <div class="routes-planner-layout">
+            <!-- Columna Izquierda: Carga e Importación y Asignación Manual -->
+            <div class="planner-col form-col">
+              
+              <!-- Carga Masiva de Rutas -->
+              <div class="dashboard-panel card">
+                <div class="panel-header">
+                  <div class="panel-title">
+                    <i data-lucide="upload-cloud" class="text-blue"></i>
+                    <h2>Carga Masiva de Rutas</h2>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <p class="panel-subtitle">Sube un archivo de Excel (.xlsx, .xls) o CSV, o copia y pega filas directo de tu base de datos.</p>
+                  
+                  <!-- File Uploader Drag and Drop -->
+                  <div class="file-upload-zone" id="routes-file-zone">
+                    <i data-lucide="file-spreadsheet" class="upload-zone-icon"></i>
+                    <p>Arrastra aquí tu archivo Excel o CSV</p>
+                    <span>O haz clic para explorar tus carpetas</span>
+                    <input type="file" id="routes-file-input" accept=".xlsx,.xls,.csv" class="visually-hidden">
+                  </div>
+                  
+                  <div class="separator-text"><span>O COPIA Y PEGA DESDE EXCEL</span></div>
+                  
+                  <!-- Copy Paste Textarea -->
+                  <div class="form-group">
+                    <label for="routes-copy-paste">Pega aquí los datos de tu Excel</label>
+                    <textarea id="routes-copy-paste" rows="4" placeholder="Promotor&#9;Tienda&#9;Dirección&#9;Fecha&#9;Latitud&#9;Longitud&#10;Pedro Gómez&#9;Oxxo Arboledas&#9;Calzada de los Jinetes 12&#9;2026-05-22&#9;19.5015&#9;-99.2312"></textarea>
+                    <span class="input-helper">Formato: Promotor, Tienda, Dirección, Fecha, Latitud, Longitud (Separado por tabuladores o comas). Todos los campos son obligatorios.</span>
+                  </div>
+
+                  <!-- Template helper Toggle -->
+                  <div class="template-helper-box">
+                    <button type="button" class="btn-text" id="btn-show-example">
+                      <i data-lucide="help-circle"></i> Ver formato de ejemplo
+                    </button>
+                    <div id="routes-example-data" class="hidden example-data-box">
+                      <p>Puedes copiar este ejemplo y pegarlo arriba:</p>
+                      <pre>Pedro Gómez, Oxxo Arboledas, Calzada de los Jinetes 12, 2026-05-22, 19.5015, -99.2312
+Pedro Gómez, Chedraui Satélite, Manuel Ávila Camacho 25, 2026-05-22, 19.5089, -99.2425
+Sofía Rodríguez, Walmart Lomas, Vía Adolfo López Mateos 100, 2026-05-21, 19.5372, -99.2201
+Carlos Mendoza, Bodega Aurrera Atizapán, Av. Juárez 45, 2026-05-21, 19.5200, -99.2150</pre>
+                    </div>
+                  </div>
+
+                  <!-- Actions -->
+                  <div class="loader-actions-row">
+                    <button type="button" id="btn-process-routes" class="btn btn-primary btn-block">
+                      <i data-lucide="play-circle"></i> Procesar y Cargar Rutas
+                    </button>
+                  </div>
+                  
+                  <!-- Preview Table Container -->
+                  <div id="import-preview-container" class="hidden import-preview-box">
+                    <h4>Previsualización de Importación</h4>
+                    <div class="table-responsive-preview">
+                      <table class="preview-table">
+                        <thead>
+                          <tr>
+                            <th>Promotor</th>
+                            <th>Tienda</th>
+                            <th>Dirección</th>
+                            <th>Fecha</th>
+                            <th>Latitud</th>
+                            <th>Longitud</th>
+                          </tr>
+                        </thead>
+                        <tbody id="import-preview-body">
+                        </tbody>
+                      </table>
+                    </div>
+                    <button type="button" id="btn-confirm-import" class="btn btn-success btn-block mt-2">
+                      <i data-lucide="check"></i> Confirmar Carga
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Asignación Manual Directa -->
+              <div class="dashboard-panel card">
+                <div class="panel-header">
+                  <div class="panel-title">
+                    <i data-lucide="user-plus" class="text-indigo"></i>
+                    <h2>Asignación Manual</h2>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <form id="manual-route-form">
+                    <div class="form-group">
+                      <label for="route-promoter-select">Selecciona Promotor</label>
+                      <select id="route-promoter-select" required>
+                        <!-- Dynamic list + option to add new -->
+                      </select>
+                    </div>
+                    
+                    <!-- Optional: Add new promoter input inline if 'new' is selected -->
+                    <div class="form-group hidden" id="new-promoter-input-group">
+                      <label for="new-promoter-name">Nombre del Nuevo Promotor</label>
+                      <input type="text" id="new-promoter-name" placeholder="Ej. Juan Pérez">
+                    </div>
+
+                    <div class="form-group">
+                      <label for="route-store-select">Selecciona Tienda</label>
+                      <select id="route-store-select" required>
+                        <!-- Dynamic list + option to add new -->
+                      </select>
+                    </div>
+
+                    <!-- Optional: Add new store fields inline if 'new' is selected -->
+                    <div id="new-store-inputs" class="hidden">
+                      <div class="form-group">
+                        <label for="new-store-name">Nombre de Nueva Tienda</label>
+                        <input type="text" id="new-store-name" placeholder="Ej. Walmart Satélite">
+                      </div>
+                      <div class="form-group">
+                        <label for="new-store-address">Dirección de Nueva Tienda</label>
+                        <input type="text" id="new-store-address" placeholder="Ej. Av. Lomas Verdes 150">
+                      </div>
+                      <div class="form-row-2col" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 1rem;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                          <label for="new-store-lat">Latitud</label>
+                          <input type="number" step="any" id="new-store-lat" placeholder="Ej. 19.5089">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                          <label for="new-store-lng">Longitud</label>
+                          <input type="number" step="any" id="new-store-lng" placeholder="Ej. -99.2425">
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="route-date-input">Fecha de Trabajo</label>
+                      <input type="date" id="route-date-input" value="2026-05-21" required>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="route-form-select">Formularios a Asignar</label>
+                      <select id="route-form-select" class="form-control" multiple size="4" style="height: auto; min-height: 100px;">
+                        <option value="default">Reporte Clásico (KPIs e Inventario)</option>
+                        <!-- Dynamic forms loaded here -->
+                      </select>
+                      <small style="color: var(--text-muted, #6b7280); margin-top: 4px; display: block; font-size: 0.75rem;">
+                        <i>Mantén <kbd>Ctrl</kbd> (o <kbd>⌘</kbd> en Mac) para seleccionar varios formularios</i>
+                      </small>
+                    </div>
+
+                    <button type="submit" class="btn btn-indigo btn-block">
+                      <i data-lucide="plus-circle"></i> Asignar a Ruta
+                    </button>
+                  </form>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Columna Derecha: Visor de Rutas Activas del Día -->
+            <div class="planner-col list-col">
+              <div class="dashboard-panel card h-full">
+                <div class="panel-header flex-between">
+                  <div class="panel-title flex-align">
+                    <i data-lucide="calendar" class="text-emerald"></i>
+                    <h2>Monitor de Rutas Programadas</h2>
+                  </div>
+                  <!-- Date Selector for dashboard planning view -->
+                  <div class="date-picker-wrapper">
+                    <input type="date" id="planner-date-filter" value="2026-05-21" class="planner-date-input">
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <p class="panel-subtitle">Monitorea y edita las rutas asignadas para la fecha seleccionada.</p>
+                  
+                  <div class="active-routes-monitor" id="active-routes-monitor-container">
+                    <!-- Dynamic rendering of routes grouped by promoter -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        
+      </section>
+
+      <!-- 5. MAQUETADOR DE FORMULARIOS -->
+      <section id="view-forms" class="view-section" role="tabpanel">
+        <div class="routes-planner-layout">
+          <!-- Columna Izquierda: Listado/Selector de Formularios y Nombre -->
+          <div class="planner-col form-col">
+            <div class="dashboard-panel card">
+              <div class="panel-header">
+                <div class="panel-title">
+                  <i data-lucide="file-spreadsheet" class="text-blue"></i>
+                  <h2>Gestión de Formularios</h2>
+                </div>
+              </div>
+              <div class="panel-body">
+                <p class="panel-subtitle">Selecciona, edita, renombra o elimina los formularios dinámicos disponibles.</p>
+                
+                <div class="form-group">
+                  <label for="form-active-select">Formulario Activo</label>
+                  <select id="form-active-select" class="form-control">
+                    <!-- Dynamic forms loaded here -->
+                  </select>
+                </div>
+                
+                <div class="form-group">
+                  <label for="form-rename-input">Nombre del Formulario</label>
+                  <input type="text" id="form-rename-input" class="form-control" placeholder="Ej. Reporte de Incidencias">
+                </div>
+
+                <div class="form-actions-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 1rem;">
+                  <button type="button" id="btn-save-form-name" class="btn btn-primary btn-block">
+                    <i data-lucide="save"></i> Renombrar
+                  </button>
+                  <button type="button" id="btn-delete-form" class="btn btn-danger-outline btn-block">
+                    <i data-lucide="trash-2"></i> Eliminar
+                  </button>
+                </div>
+
+                <div class="separator-text" style="margin: 1.5rem 0;"><span>O CREAR UNO NUEVO</span></div>
+
+                <button type="button" id="btn-create-new-form" class="btn btn-indigo btn-block">
+                  <i data-lucide="plus-circle"></i> Nuevo Formulario en Blanco
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Columna Derecha: Canvas de Preguntas del Formulario Seleccionado -->
+          <div class="planner-col list-col">
+            <div class="dashboard-panel card h-full">
+              <div class="panel-header flex-between">
+                <div class="panel-title flex-align">
+                  <i data-lucide="list-todo" class="text-emerald"></i>
+                  <h2 id="form-canvas-title">Preguntas del Formulario</h2>
+                </div>
+                <button type="button" id="btn-add-question-trigger" class="btn btn-success">
+                  <i data-lucide="plus"></i> Nueva Pregunta
+                </button>
+              </div>
+              <div class="panel-body">
+                <p class="panel-subtitle">Define las preguntas de este formulario, su tipo, obligatoriedad y dependencias condicionales.</p>
+                
+                <div class="table-responsive">
+                  <table class="visits-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 50px;">Nº</th>
+                        <th>Tipo</th>
+                        <th>Pregunta</th>
+                        <th>Dependencia</th>
+                        <th style="width: 100px;">Obligatoria</th>
+                        <th style="width: 140px;">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody id="form-questions-table-body">
+                      <!-- Dynamic questions rendered in app.js -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- 4. CONSOLA CENTRAL -->
+      <section id="view-console" class="view-section" role="tabpanel">
+        <div class="console-layout">
+          
+          <!-- Column 1: Configuración General y Crear Usuario -->
+          <div class="console-col sidebar-col">
+            
+            <!-- Configuración de Geofencing -->
+            <div class="dashboard-panel card">
+              <div class="panel-header">
+                <div class="panel-title">
+                  <i data-lucide="settings" class="text-indigo"></i>
+                  <h2>Parámetros de Operación</h2>
+                </div>
+              </div>
+              <div class="panel-body">
+                <p class="panel-subtitle">Establece las reglas geográficas globales para el registro de asistencia en campo.</p>
+                <form id="console-config-form">
+                  <div class="form-group">
+                    <label for="console-geofence-range">Rango Máximo de Check-In</label>
+                    <select id="console-geofence-range" class="form-control">
+                      <option value="25">25 metros (Alta precisión)</option>
+                      <option value="50">50 metros (Estándar)</option>
+                      <option value="100">100 metros (Flexible)</option>
+                      <option value="250">250 metros (Amplio)</option>
+                    </select>
+                    <span class="input-helper">Si el promotor está fuera de este rango respecto a la tienda, se bloqueará el Check-In.</span>
+                  </div>
+                  <button type="submit" class="btn btn-primary btn-block">
+                    <i data-lucide="save"></i> Guardar Configuración
+                  </button>
+                </form>
+              </div>
+            </div>
+            
+            <!-- Crear Nuevo Usuario / Credenciales -->
+            <div class="dashboard-panel card">
+              <div class="panel-header">
+                <div class="panel-title">
+                  <i data-lucide="user-plus" class="text-blue"></i>
+                  <h2>Alta de Credenciales</h2>
+                </div>
+              </div>
+              <div class="panel-body">
+                <form id="console-user-form">
+                  <div class="form-group">
+                    <label for="console-username-input">Usuario (Username)</label>
+                    <input type="text" id="console-username-input" placeholder="Ej. juan" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="console-password-input">Contraseña</label>
+                    <input type="password" id="console-password-input" placeholder="••••••••" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="console-name-input">Nombre Completo</label>
+                    <input type="text" id="console-name-input" placeholder="Ej. Juan Pérez" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="console-role-select">Rol del Sistema</label>
+                    <select id="console-role-select" required>
+                      <option value="promoter">Promotor (App Móvil)</option>
+                      <option value="supervisor">Supervisor (Dashboard completo)</option>
+                    </select>
+                  </div>
+                  <button type="submit" class="btn btn-indigo btn-block">
+                    <i data-lucide="plus-circle"></i> Guardar Usuario
+                  </button>
+                </form>
+              </div>
+            </div>
+            
+          </div>
+          
+          <!-- Column 2: Tablas de Administración (Usuarios y Tiendas) -->
+          <div class="console-col main-col">
+            
+            <!-- Tabla de Usuarios Activos -->
+            <div class="dashboard-panel card table-panel">
+              <div class="panel-header">
+                <div class="panel-title">
+                  <i data-lucide="users" class="text-emerald"></i>
+                  <h2>Credenciales y Accesos Activos</h2>
+                </div>
+              </div>
+              <div class="table-responsive">
+                <table class="visits-table">
+                  <thead>
+                    <tr>
+                      <th>Usuario</th>
+                      <th>Nombre</th>
+                      <th>Rol</th>
+                      <th>ID Promotor</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="console-users-table-body">
+                    <!-- Dynamic rendering of users -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+            <!-- Tabla de Tiendas y sus Coordenadas GPS -->
+            <div class="dashboard-panel card table-panel">
+              <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <div class="panel-title">
+                  <i data-lucide="map-pin" class="text-orange"></i>
+                  <h2>Catálogo de Tiendas (Geolocalización)</h2>
+                </div>
+                <button type="button" class="btn btn-primary" id="btn-create-store" style="padding: 6px 12px; font-size: 0.85rem;">
+                  <i data-lucide="plus"></i> Crear Tienda
+                </button>
+              </div>
+              
+              <div class="panel-body" style="padding: 0 1.5rem 1rem;">
+                <div class="separator-text" style="margin-bottom: 0.5rem; margin-top: 0;"><span>Carga Masiva de Tiendas</span></div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                  <textarea id="stores-copy-paste" rows="3" placeholder="Pegar Excel/CSV: store_code&#9;store_name&#9;chain&#9;address&#9;city&#9;state&#9;latitude&#9;longitude&#9;geofence_radius"></textarea>
+                  <span class="input-helper">Formato obligatorio: Código, Nombre, Cadena, Dirección, Ciudad, Estado, Latitud, Longitud, Radio.</span>
+                </div>
+                <div style="display: flex; justify-content: flex-end;">
+                  <button type="button" id="btn-process-stores" class="btn btn-secondary" style="font-size: 0.8rem; padding: 6px 12px;">
+                    <i data-lucide="upload"></i> Importar Tiendas
+                  </button>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table class="visits-table">
+                  <thead>
+                    <tr>
+                      <th>Tienda</th>
+                      <th>Dirección</th>
+                      <th>Latitud</th>
+                      <th>Longitud</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="console-stores-table-body">
+                    <!-- Dynamic rendering of stores coordinate details -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+          </div>
+          
+        </div>
+      </section>
+      
+    </main>
+  </div>
+
+  <!-- MODAL DE PREGUNTAS (CREAR / EDITAR) -->
+  <dialog id="question-dialog" closedby="any" class="modal-dialog" aria-labelledby="question-modal-title">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="question-modal-title">Crear Pregunta</h2>
+        <button type="button" class="btn-close-modal" id="btn-close-question-modal">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="question-editor-form">
+          <input type="hidden" id="edit-question-id" value="">
+          
+          <!-- Grid Interactiva de Selección de Tipo de Pregunta -->
+          <div class="form-group">
+            <label>Tipo de Pregunta</label>
+            <div class="question-type-grid">
+              <button type="button" class="qtype-btn active" data-type="yes_no">
+                <i data-lucide="toggle-left"></i>
+                <span>Sí / No</span>
+              </button>
+              <button type="button" class="qtype-btn" data-type="text">
+                <i data-lucide="file-text"></i>
+                <span>Abierta (Texto)</span>
+              </button>
+              <button type="button" class="qtype-btn" data-type="multiple">
+                <i data-lucide="list-checks"></i>
+                <span>Op. Múltiple</span>
+              </button>
+              <button type="button" class="qtype-btn" data-type="numeric">
+                <i data-lucide="hash"></i>
+                <span>Numérica</span>
+              </button>
+              <button type="button" class="qtype-btn" data-type="barcode">
+                <i data-lucide="qr-code"></i>
+                <span>Scanner / QR</span>
+              </button>
+              <button type="button" class="qtype-btn" data-type="photo">
+                <i data-lucide="camera"></i>
+                <span>Fotografía</span>
+              </button>
+            </div>
+            <input type="hidden" id="selected-question-type" value="yes_no">
+          </div>
+
+          <!-- Nombre de la pregunta -->
+          <div class="form-group">
+            <label for="question-title-input">Texto de la Pregunta</label>
+            <input type="text" id="question-title-input" class="form-control" placeholder="Ej. ¿Está limpio el mueble?" required>
+          </div>
+
+          <!-- Opciones para Opción Múltiple -->
+          <div class="form-group hidden" id="question-options-group">
+            <label for="question-options-input">Opciones (separadas por comas)</label>
+            <input type="text" id="question-options-input" class="form-control" placeholder="Ej. Excelente, Bueno, Regular, Malo">
+          </div>
+
+          <!-- Obligatoria Checkbox -->
+          <div class="form-group-checkbox" style="margin-bottom: 1.5rem;">
+            <input type="checkbox" id="question-required-checkbox">
+            <label for="question-required-checkbox">Esta pregunta es obligatoria</label>
+          </div>
+
+          <!-- Configuración de Dependencia Condicional -->
+          <div class="dependency-settings-card">
+            <h4><i data-lucide="git-branch" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"></i> Dependencia Condicional (Opcional)</h4>
+            <p class="panel-subtitle" style="margin-bottom: 0.5rem;">Muestra esta pregunta solo si otra pregunta anterior tiene un valor específico.</p>
+            
+            <div class="dependency-fields-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 0.5rem;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="question-dependency-parent">Depende de:</label>
+                <select id="question-dependency-parent" class="form-control">
+                  <option value="">-- Sin dependencia --</option>
+                  <!-- List of prior questions -->
+                </select>
+              </div>
+              <div class="form-group hidden" id="question-dependency-value-group" style="margin-bottom: 0;">
+                <label for="question-dependency-value">Cuando sea:</label>
+                <select id="question-dependency-value" class="form-control">
+                  <!-- Values generated based on parent type -->
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-success btn-block" style="margin-top: 1.5rem;">
+            <i data-lucide="check"></i> <span id="btn-save-question-text">Guardar pregunta</span>
+          </button>
+        </form>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- VISITS DETAILS MODAL -->
+  <dialog id="visit-detail-dialog" closedby="any" class="modal-dialog" aria-labelledby="modal-title">
+    <!-- Close fallback handled in JS -->
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modal-title">Detalle de la Visita Comercial</h2>
+        <button type="button" class="btn-close-modal" id="btn-close-visit-modal">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body" id="visit-modal-body">
+        <!-- Dynamic loading of details in app.js -->
+      </div>
+    </div>
+  </dialog>
+
+  <!-- STORE HISTORY DIALOG -->
+  <dialog id="store-history-dialog" aria-labelledby="sh-dialog-title">
+    <!-- Header -->
+    <div class="store-history-header">
+      <div class="store-history-header-info">
+        <h2 id="sh-dialog-title" id="sh-store-name">Tienda</h2>
+        <p><i data-lucide="map-pin" style="width:14px;height:14px;"></i> <span id="sh-store-address"></span></p>
+      </div>
+      <div class="store-history-header-stats">
+        <div class="store-hstat">
+          <span class="hstat-value" id="sh-stat-visits">0</span>
+          <span class="hstat-label">Visitas</span>
+        </div>
+        <div class="store-hstat">
+          <span class="hstat-value" id="sh-stat-last">--</span>
+          <span class="hstat-label">Última</span>
+        </div>
+        <div class="store-hstat">
+          <span class="hstat-value" id="sh-stat-promoters">0</span>
+          <span class="hstat-label">Promotores</span>
+        </div>
+      </div>
+      <button class="store-history-close" id="btn-close-store-history" aria-label="Cerrar">
+        <i data-lucide="x"></i>
+      </button>
+    </div>
+
+    <!-- Scrollable Body -->
+    <div class="store-history-body" id="store-history-body">
+      <!-- Dynamic content rendered by JS -->
+    </div>
+  </dialog>
+
+  <!-- Core Script -->
+  <!-- PWA Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./service-worker.js')
+          .then(registration => {
+            console.log('ServiceWorker registration successful with scope: ', registration.scope);
+          }, err => {
+            console.log('ServiceWorker registration failed: ', err);
+          });
+      });
+    }
+  </script>
+</body>
+</html>

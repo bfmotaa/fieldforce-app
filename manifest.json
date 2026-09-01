@@ -1,0 +1,16 @@
+{
+  "name": "FieldForce Insights",
+  "short_name": "FieldForce",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://www.gstatic.com/images/branding/product/1x/forms_512dp.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
