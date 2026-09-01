@@ -4815,9 +4815,18 @@ function openCheckinModal(routeId) {
   const route = db.routes.find(r => r.id === routeId);
   const store = db.stores[route.storeId];
   
-  if (!store || isNaN(parseFloat(store.latitude)) || isNaN(parseFloat(store.longitude)) || isNaN(parseFloat(store.geofenceRadius)) || parseFloat(store.geofenceRadius) <= 0) {
+  if (!store) {
+    alert("Error: Tienda no encontrada.");
+    return;
+  }
+  
+  const lat = parseFloat(store.latitude !== undefined ? store.latitude : store.lat);
+  const lng = parseFloat(store.longitude !== undefined ? store.longitude : store.lng);
+  const radius = parseFloat(store.geofenceRadius !== undefined ? store.geofenceRadius : 100);
+  
+  if (isNaN(lat) || isNaN(lng) || isNaN(radius) || radius <= 0) {
     alert("Error: La tienda no tiene configuración válida de geocerca (Lat, Lng o Radio faltante/inválido). No se puede realizar el check-in.");
-    return; // User rule: Si falta radio o es inválido, bloquear check-in.
+    return;
   }
   
   document.getElementById('checkin-store-name').textContent = store.name || store.storeName || "Tienda";
@@ -4849,8 +4858,11 @@ async function executeGPSCheckin() {
       throw new Error(`Precisión insuficiente (${Math.round(position.accuracy)}m > límite ${window.GeofenceSettings.GPS_MAX_ACCURACY_METERS}m).`);
     }
     
-    const distance = window.Geofence.calculateDistance(position.latitude, position.longitude, parseFloat(store.latitude), parseFloat(store.longitude));
-    const radius = parseFloat(store.geofenceRadius);
+    const lat = parseFloat(store.latitude !== undefined ? store.latitude : store.lat);
+    const lng = parseFloat(store.longitude !== undefined ? store.longitude : store.lng);
+    const radius = parseFloat(store.geofenceRadius !== undefined ? store.geofenceRadius : 100);
+    
+    const distance = window.Geofence.calculateDistance(position.latitude, position.longitude, lat, lng);
     const isValid = distance <= radius;
     
     document.getElementById('checkin-accuracy').textContent = `${Math.round(position.accuracy)} m`;
