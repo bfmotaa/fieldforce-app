@@ -2906,10 +2906,36 @@ function parseArrayOfArrays(rows) {
   
   let startIndex = 0;
   
-  // Detect header row (skip if matching names)
+  // Default indices (old 6-column format)
+  let colPromotor = 0, colCadena = -1, colTienda = 1, colDireccion = 2, colFecha = 3, colLat = 4, colLng = 5;
+  
+  // Detect header row
   const firstRowStr = rows[0].join(' ').toLowerCase();
   if (firstRowStr.includes('promotor') || firstRowStr.includes('tienda') || firstRowStr.includes('direc') || firstRowStr.includes('fecha')) {
     startIndex = 1;
+    const headerRow = rows[0].map(s => String(s).toLowerCase().trim());
+    
+    // Try to find exact columns
+    const findCol = (keywords) => headerRow.findIndex(h => keywords.some(k => h.includes(k)));
+    
+    const idxP = findCol(['promotor']);
+    const idxC = findCol(['cadena']);
+    const idxT = findCol(['tienda', 'sucursal']);
+    const idxD = findCol(['direcci']);
+    const idxF = findCol(['fecha']);
+    const idxLat = findCol(['latitud', 'lat']);
+    const idxLng = findCol(['longitud', 'lng', 'lon']);
+    
+    if (idxP !== -1) colPromotor = idxP;
+    if (idxC !== -1) colCadena = idxC;
+    if (idxT !== -1) colTienda = idxT;
+    if (idxD !== -1) colDireccion = idxD;
+    if (idxF !== -1) colFecha = idxF;
+    if (idxLat !== -1) colLat = idxLat;
+    if (idxLng !== -1) colLng = idxLng;
+  } else if (rows[0].length >= 7) {
+    // If no header but it has 7+ columns, assume the new CADENA format
+    colPromotor = 0; colCadena = 1; colTienda = 2; colDireccion = 3; colFecha = 4; colLat = 5; colLng = 6;
   }
   
   pendingImportRoutes = [];
@@ -2923,13 +2949,22 @@ function parseArrayOfArrays(rows) {
     const row = rows[i];
     if (row.length < 2) continue;
     
-    const promoterName = row[0] !== undefined && row[0] !== null ? String(row[0]).trim() : '';
-    const storeName = row[1] !== undefined && row[1] !== null ? String(row[1]).trim() : '';
-    const storeAddress = row[2] !== undefined && row[2] !== null ? String(row[2]).trim() : '';
-    let dateStr = row[3] !== undefined && row[3] !== null ? String(row[3]).trim() : '';
+    const promoterName = row[colPromotor] !== undefined && row[colPromotor] !== null ? String(row[colPromotor]).trim() : '';
     
-    const latVal = row[4] !== undefined && row[4] !== null ? parseFloat(String(row[4]).trim()) : NaN;
-    const lngVal = row[5] !== undefined && row[5] !== null ? parseFloat(String(row[5]).trim()) : NaN;
+    // Combine Cadena and Tienda if Cadena exists
+    let storeName = row[colTienda] !== undefined && row[colTienda] !== null ? String(row[colTienda]).trim() : '';
+    if (colCadena !== -1 && row[colCadena]) {
+      const cadenaVal = String(row[colCadena]).trim();
+      if (cadenaVal && !storeName.toLowerCase().startsWith(cadenaVal.toLowerCase())) {
+        storeName = `${cadenaVal} ${storeName}`;
+      }
+    }
+    
+    const storeAddress = row[colDireccion] !== undefined && row[colDireccion] !== null ? String(row[colDireccion]).trim() : '';
+    let dateStr = row[colFecha] !== undefined && row[colFecha] !== null ? String(row[colFecha]).trim() : '';
+    
+    const latVal = row[colLat] !== undefined && row[colLat] !== null ? parseFloat(String(row[colLat]).trim()) : NaN;
+    const lngVal = row[colLng] !== undefined && row[colLng] !== null ? parseFloat(String(row[colLng]).trim()) : NaN;
     
     if (!promoterName || !storeName) continue;
     
