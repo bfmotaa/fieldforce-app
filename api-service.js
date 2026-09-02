@@ -1158,6 +1158,7 @@ const ApiService = (() => {
     createRoute,
     updateRoute,
     assignRoute,
+    uploadRoutes,
     addStoreToRoute,
     removeStoreFromRoute,
     completeRoute,
