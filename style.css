@@ -211,6 +211,12 @@ h1, h2, h3, h4, h5, h6 {
   padding: 4px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .role-toggle-bg {
   display: flex;
   gap: 4px;

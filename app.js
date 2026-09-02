@@ -67,7 +67,7 @@ async function loadStoresForClient(clientId) {
       }
     });
 
-    db.stores = realStores;
+    db.stores = { ...db.stores, ...realStores };
     return true;
   } catch(e) {
     console.error("Excepción al cargar tiendas:", e);
@@ -85,7 +85,7 @@ async function loadFormsFromBackend() {
         realForms[f.id] = f;
       });
       if (Object.keys(realForms).length > 0) {
-        db.forms = realForms;
+        db.forms = { ...db.forms, ...realForms };
       }
       return true;
     }
