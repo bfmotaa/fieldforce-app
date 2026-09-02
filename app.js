@@ -3069,83 +3069,111 @@ function cleanDateString(dateStr) {
   return dateStr;
 }
 
-function confirmImportedRoutes() {
+async function confirmImportedRoutes() {
   if (pendingImportRoutes.length === 0) return;
   
   let addedCount = 0;
   let skippedCount = 0;
   
-  pendingImportRoutes.forEach(imp => {
-    // 1. Resolve promoter
-    let promoterId = null;
-    const existingPromoter = Object.values(db.promoters).find(p => p.name.toLowerCase() === imp.promoterName.toLowerCase());
-    if (existingPromoter) {
-      promoterId = existingPromoter.id;
-    } else {
-      promoterId = `promoter-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-      const initials = imp.promoterName.split(' ').filter(n => n).map(n => n[0]).join('').toUpperCase().substring(0, 2);
-      db.promoters[promoterId] = {
-        id: promoterId,
-        name: imp.promoterName,
-        avatar: initials
-      };
-    }
-    
-    // 2. Resolve store
-    let storeId = null;
-    const existingStore = Object.values(db.stores).find(s => s.name.toLowerCase() === imp.storeName.toLowerCase());
-    if (existingStore) {
-      storeId = existingStore.id;
-      if (imp.lat !== undefined && imp.lng !== undefined) {
-        existingStore.lat = imp.lat;
-        existingStore.lng = imp.lng;
+  // Mostrar estado de carga (asumiendo que el botón que llamó a esto puede cambiar, o usamos el alert)
+  const btnConfirm = document.getElementById('btn-confirm-import');
+  const originalText = btnConfirm ? btnConfirm.innerHTML : '';
+  if (btnConfirm) {
+    btnConfirm.disabled = true;
+    btnConfirm.innerHTML = '<i data-lucide="loader" class="spin"></i> Guardando en la nube...';
+    if (window.lucide) window.lucide.createIcons();
+  }
+
+  try {
+    // 1. Enviar a la nube a través de la API
+    if (window.ApiService && window.ApiService.uploadRoutes) {
+      const result = await window.ApiService.uploadRoutes(pendingImportRoutes);
+      if (!result.success && !result._offline) {
+        throw new Error(result.error ? result.error.message : 'Error al sincronizar con la nube.');
       }
-    } else {
-      storeId = `store-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-      db.stores[storeId] = {
-        id: storeId,
-        name: imp.storeName,
-        address: imp.storeAddress,
-        lat: imp.lat,
-        lng: imp.lng
-      };
     }
+
+    // 2. Guardar localmente para actualizar la UI inmediatamente
+    pendingImportRoutes.forEach(imp => {
+      // Resolve promoter
+      let promoterId = null;
+      const existingPromoter = Object.values(db.promoters).find(p => p.name.toLowerCase() === imp.promoterName.toLowerCase());
+      if (existingPromoter) {
+        promoterId = existingPromoter.id;
+      } else {
+        promoterId = `promoter-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+        const initials = imp.promoterName.split(' ').filter(n => n).map(n => n[0]).join('').toUpperCase().substring(0, 2);
+        db.promoters[promoterId] = {
+          id: promoterId,
+          name: imp.promoterName,
+          avatar: initials
+        };
+      }
+      
+      // Resolve store
+      let storeId = null;
+      const existingStore = Object.values(db.stores).find(s => s.name.toLowerCase() === imp.storeName.toLowerCase());
+      if (existingStore) {
+        storeId = existingStore.id;
+        if (imp.lat !== undefined && imp.lng !== undefined) {
+          existingStore.lat = imp.lat;
+          existingStore.lng = imp.lng;
+        }
+      } else {
+        storeId = `store-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+        db.stores[storeId] = {
+          id: storeId,
+          name: imp.storeName,
+          address: imp.storeAddress,
+          lat: imp.lat,
+          lng: imp.lng
+        };
+      }
+      
+      // Register route assignment if it doesn't exist
+      const exists = db.routes.some(r => r.promoterId === promoterId && r.storeId === storeId && r.date === imp.date);
+      if (!exists) {
+        db.routes.push({
+          id: `route-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          promoterId: promoterId,
+          storeId: storeId,
+          date: imp.date,
+          status: 'pendiente',
+          checkIn: null,
+          checkOut: null,
+          data: null,
+          formIds: []
+        });
+        addedCount++;
+      } else {
+        skippedCount++;
+      }
+    });
     
-    // 3. Register route assignment if it doesn't exist
-    const exists = db.routes.some(r => r.promoterId === promoterId && r.storeId === storeId && r.date === imp.date);
-    if (!exists) {
-      db.routes.push({
-        id: `route-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        promoterId: promoterId,
-        storeId: storeId,
-        date: imp.date,
-        status: 'pendiente',
-        checkIn: null,
-        checkOut: null,
-        data: null,
-        formIds: []
-      });
-      addedCount++;
-    } else {
-      skippedCount++;
+    saveDB();
+    
+    alert(`Carga finalizada y sincronizada con la nube.\nSe agregaron ${addedCount} asignaciones de ruta. (${skippedCount} duplicados ignorados).`);
+    
+    pendingImportRoutes = [];
+    document.getElementById('import-preview-container').classList.add('hidden');
+    document.getElementById('routes-copy-paste').value = '';
+    document.getElementById('routes-file-input').value = '';
+    
+    populateManualAssignmentDropdowns();
+    renderMobilePromoterDropdown();
+    renderRoutePlanner();
+    renderRouteList();
+    updateSupervisorDashboard();
+    renderCentralConsole();
+
+  } catch (error) {
+    alert(`Ocurrió un error al cargar las rutas en la nube: ${error.message}\nVerifique su conexión.`);
+  } finally {
+    if (btnConfirm) {
+      btnConfirm.disabled = false;
+      btnConfirm.innerHTML = originalText;
     }
-  });
-  
-  saveDB();
-  
-  alert(`Carga finalizada. Se agregaron ${addedCount} asignaciones de ruta. (${skippedCount} duplicados ignorados).`);
-  
-  pendingImportRoutes = [];
-  document.getElementById('import-preview-container').classList.add('hidden');
-  document.getElementById('routes-copy-paste').value = '';
-  document.getElementById('routes-file-input').value = '';
-  
-  populateManualAssignmentDropdowns();
-  renderMobilePromoterDropdown();
-  renderRoutePlanner();
-  renderRouteList();
-  updateSupervisorDashboard();
-  renderCentralConsole();
+  }
 }
 
 /* ==========================================================================

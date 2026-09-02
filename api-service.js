@@ -423,6 +423,27 @@ const ApiService = (() => {
     return await _post('changePassword', { currentPassword, newPassword });
   }
 
+  /**
+   * Asigna una ruta a un promotor.
+   * @param {string} routeId
+   * @param {string} promoterId
+   * @param {string} supervisorId
+   * @returns {Promise<Object>}
+   */
+  async function assignRoute(routeId, promoterId, supervisorId) {
+    return await _post('assignRoute', { routeId, promoterId, supervisorId });
+  }
+
+  /**
+   * Sube masivamente las rutas al servidor desde el CSV
+   * @param {Array} routes - Arreglo de rutas parseadas
+   */
+  async function uploadRoutes(routes) {
+    return await _post('bulkUploadRoutes', { routes });
+  }
+
+  // ── Gestor de Sincronización (Etapa 2E) ──────────────────────────────────────────────
+
 
   // ── Administración de usuarios ──────────────────────────────────────────────
 
