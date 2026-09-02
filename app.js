@@ -360,7 +360,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Mobile date select event binding
   const mobileDateSelect = document.getElementById('mobile-date-select');
   if (mobileDateSelect) {
-    mobileDateSelect.value = selectedDate;
+    const todayStr = getLocalDateString();
+    
+    // Generar opciones dinámicas: Solo mostrar "Hoy" para el promotor. 
+    // Para simplificar, forzaremos a que siempre sea la fecha seleccionada.
+    mobileDateSelect.innerHTML = `<option value="${todayStr}">Hoy (${todayStr.substring(8,10)}/${todayStr.substring(5,7)})</option>`;
+    mobileDateSelect.value = todayStr;
+    selectedDate = todayStr; // Forzar a hoy en vista promotor
+    
     mobileDateSelect.addEventListener('change', () => {
       selectedDate = mobileDateSelect.value;
       renderRouteList();
@@ -760,17 +767,19 @@ function renderRouteList() {
       : '').join('');
       
     card.innerHTML = `
-      <div class="store-route-info">
-        <h4>${store.name} ${formBadgeHTML}</h4>
-        <p style="font-size: 0.75rem; color: var(--neutral-muted); margin-bottom: 2px;">
-          <strong>${store.chain}</strong> | ${store.code} | <i data-lucide="clock" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-top:-2px;"></i> ${route.scheduledStart} - ${route.scheduledEnd}
+      <div class="store-route-info" style="flex: 1;">
+        <h4 style="margin: 0 0 4px 0; font-size: 1rem;">${store.name} ${formBadgeHTML}</h4>
+        <p style="font-size: 0.75rem; color: var(--neutral-muted); margin-bottom: 4px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+          <strong>${store.chain !== 'N/A' && store.chain !== undefined ? store.chain : 'Sin Cadena'}</strong> 
+          ${store.code ? `| ${store.code}` : ''} 
+          ${route.scheduledStart && route.scheduledStart !== '--:--' ? `| <i data-lucide="clock" style="width:12px;height:12px;"></i> ${route.scheduledStart} - ${route.scheduledEnd || '--:--'}` : ''}
         </p>
-        <p><i data-lucide="map-pin"></i> ${store.address}</p>
+        <p style="margin: 0; font-size: 0.85rem; display: flex; align-items: center; gap: 4px;"><i data-lucide="map-pin" style="width:14px;height:14px;"></i> ${store.address || 'Sin dirección'}</p>
       </div>
-      <div class="store-status-icon" style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap: 4px;">
-        <span style="font-size: 0.65rem; text-transform: uppercase; font-weight: 700; color: ${isCompleted ? 'var(--success-color)' : 'var(--primary-color)'};">${route.status}</span>
-        <button class="btn btn-primary" style="padding: 4px 12px; font-size: 0.75rem; border-radius: 12px; min-height: unset;">
-          ${isCompleted ? 'Ver' : 'Iniciar'} <i data-lucide="${isCompleted ? 'check' : 'chevron-right'}" style="width:12px;height:12px;"></i>
+      <div class="store-status-icon" style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap: 6px; margin-left: 10px;">
+        <span style="font-size: 0.65rem; text-transform: uppercase; font-weight: 700; color: ${isCompleted ? 'var(--success-color)' : 'var(--primary-color)'}; text-align: center;">${route.status}</span>
+        <button class="btn btn-primary" style="padding: 6px 12px; font-size: 0.8rem; border-radius: 12px; min-height: unset; display: flex; align-items: center; gap: 4px; white-space: nowrap;">
+          ${isCompleted ? 'Ver' : 'Iniciar'} <i data-lucide="${isCompleted ? 'check' : 'chevron-right'}" style="width:14px;height:14px;"></i>
         </button>
       </div>
     `;
