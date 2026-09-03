@@ -1866,6 +1866,23 @@ function initSupervisorEvents() {
             });
           }
           
+          const routeRes = await window.ApiService.getTodayRoute(promoterId, date);
+          if (routeRes && routeRes.success && routeRes.data && routeRes.data.hasRoute) {
+            db.routes = db.routes.filter(r => !(String(r.promoterId) === String(promoterId) && r.date === date));
+            routeRes.data.stores.forEach(storeObj => {
+              db.routes.push({
+                id: storeObj.routeStoreId,
+                routeId: routeRes.data.routeId,
+                promoterId: routeRes.data.promoterId,
+                storeId: storeObj.storeId,
+                date: routeRes.data.date,
+                status: storeObj.status,
+                formIds: storeObj.formIds || [],
+                visitOrder: storeObj.visitOrder || 999
+              });
+            });
+          }
+          
           const promotersRes = await window.ApiService.getPromoters();
           if (promotersRes && promotersRes.success) {
             promotersRes.data.forEach(p => {
@@ -3236,6 +3253,9 @@ async function checkAuth() {
   const trigger = document.getElementById('promoter-profile-trigger');
   
   if (user.role === 'promoter') {
+    document.body.classList.add('role-promoter');
+    document.body.classList.remove('role-admin');
+    
     // Restrict selector tabs
     if (btnPromotor) btnPromotor.classList.remove('hidden');
     if (btnSupervisor) btnSupervisor.classList.add('hidden');
@@ -3246,6 +3266,9 @@ async function checkAuth() {
     // Lock mobile promoter switcher dropdown trigger click
     if (chevron) chevron.classList.add('hidden');
     if (trigger) trigger.style.cursor = 'default';
+    
+    const mobileLogout = document.getElementById('btn-mobile-logout');
+    if (mobileLogout) mobileLogout.style.display = 'flex';
     
     // Promoter ID is fixed for this promoter session
     selectedPromoterId = user.id || user.promoterId;
@@ -3324,6 +3347,9 @@ async function checkAuth() {
       setActiveView('supervisor');
     }
   } else if (user.role === 'admin') {
+    document.body.classList.add('role-admin');
+    document.body.classList.remove('role-promoter');
+    
     // Show all selector options
     if (btnPromotor) btnPromotor.classList.remove('hidden');
     if (btnSupervisor) btnSupervisor.classList.remove('hidden');
@@ -3334,6 +3360,9 @@ async function checkAuth() {
     // Unlock mobile promoter switcher dropdown trigger click
     if (chevron) chevron.classList.remove('hidden');
     if (trigger) trigger.style.cursor = 'pointer';
+    
+    const mobileLogout = document.getElementById('btn-mobile-logout');
+    if (mobileLogout) mobileLogout.style.display = 'none';
     
     const currentActiveView = document.querySelector('.view-section.active');
     if (!currentActiveView || currentActiveView.id === 'view-login') {
@@ -3449,13 +3478,33 @@ function initAuthAndConsole() {
     });
   }
   
-  // Logout Button
   const btnLogout = document.getElementById('btn-logout');
   if (btnLogout) {
-    btnLogout.addEventListener('click', async () => {
+    btnLogout.addEventListener('click', handleLogout);
+  }
+
+  const btnMobileLogout = document.getElementById('btn-mobile-logout');
+  if (btnMobileLogout) {
+    btnMobileLogout.addEventListener('click', handleLogout);
+  }
+  
+  async function handleLogout() {
+    try {
       await window.ApiService.logout();
-      await checkAuth();
-    });
+    } catch(e) {}
+    localStorage.removeItem('fieldflow_db');
+    db = { stores: {}, promoters: {}, routes: [], visits: [] };
+    
+    document.body.classList.remove('role-promoter');
+    document.body.classList.remove('role-admin');
+    
+    setActiveView('login');
+    const roleSelector = document.querySelector('.role-selector-container');
+    if (roleSelector) roleSelector.classList.add('hidden');
+    const sessionIndicator = document.getElementById('user-session-indicator');
+    if (sessionIndicator) sessionIndicator.classList.add('hidden');
+    btnLogout.classList.add('hidden');
+    if (btnMobileLogout) btnMobileLogout.style.display = 'none';
   }
   
   // Admin Client Selector Change
@@ -4820,9 +4869,21 @@ function openCheckinModal(routeId) {
     return;
   }
   
-  const lat = parseFloat(store.latitude !== undefined ? store.latitude : store.lat);
-  const lng = parseFloat(store.longitude !== undefined ? store.longitude : store.lng);
-  const radius = parseFloat(store.geofenceRadius !== undefined ? store.geofenceRadius : 100);
+  const parseCoord = (v1, v2) => {
+    const parse = (val) => {
+      if (val === undefined || val === null || val === '') return NaN;
+      return parseFloat(String(val).replace(',', '.'));
+    };
+    let n1 = parse(v1);
+    let n2 = parse(v2);
+    if (!isNaN(n1)) return n1;
+    if (!isNaN(n2)) return n2;
+    return NaN;
+  };
+  
+  const lat = parseCoord(store.latitude, store.lat);
+  const lng = parseCoord(store.longitude, store.lng);
+  const radius = parseCoord(store.geofenceRadius, store.geofence_radius) || 100;
   
   if (isNaN(lat) || isNaN(lng) || isNaN(radius) || radius <= 0) {
     alert("Error: La tienda no tiene configuración válida de geocerca (Lat, Lng o Radio faltante/inválido). No se puede realizar el check-in.");
@@ -4858,9 +4919,21 @@ async function executeGPSCheckin() {
       throw new Error(`Precisión insuficiente (${Math.round(position.accuracy)}m > límite ${window.GeofenceSettings.GPS_MAX_ACCURACY_METERS}m).`);
     }
     
-    const lat = parseFloat(store.latitude !== undefined ? store.latitude : store.lat);
-    const lng = parseFloat(store.longitude !== undefined ? store.longitude : store.lng);
-    const radius = parseFloat(store.geofenceRadius !== undefined ? store.geofenceRadius : 100);
+    const parseCoord = (v1, v2) => {
+      const parse = (val) => {
+        if (val === undefined || val === null || val === '') return NaN;
+        return parseFloat(String(val).replace(',', '.'));
+      };
+      let n1 = parse(v1);
+      let n2 = parse(v2);
+      if (!isNaN(n1)) return n1;
+      if (!isNaN(n2)) return n2;
+      return NaN;
+    };
+    
+    const lat = parseCoord(store.latitude, store.lat);
+    const lng = parseCoord(store.longitude, store.lng);
+    const radius = parseCoord(store.geofenceRadius, store.geofence_radius) || 100;
     
     const distance = window.Geofence.calculateDistance(position.latitude, position.longitude, lat, lng);
     const isValid = distance <= radius;
@@ -5116,14 +5189,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const row = dataRows[i];
         if (row.length < 2) continue; // skip empty rows
         
-        const getVal = (col) => row[headers.indexOf(col)] || '';
-        const storeCode = getVal('store_code');
-        const storeName = getVal('store_name');
-        const lat = parseFloat(getVal('latitude'));
-        const lng = parseFloat(getVal('longitude'));
-        const radius = parseFloat(getVal('geofence_radius'));
+        const getVal = (keys) => {
+          const idx = headers.findIndex(h => keys.some(k => h.includes(k)));
+          return idx !== -1 ? row[idx] : '';
+        };
+        const storeCode = getVal(['store_code', 'código', 'codigo']) || `ST-${Math.floor(Math.random()*10000)}`;
+        const storeName = getVal(['store_name', 'tienda', 'nombre', 'sucursal']);
+        const lat = parseFloat(getVal(['latitude', 'latitud', 'lat']));
+        const lng = parseFloat(getVal(['longitude', 'longitud', 'lng']));
+        const radius = parseFloat(getVal(['geofence_radius', 'radio'])) || 100;
         
-        if (!storeCode || !storeName || isNaN(lat) || isNaN(lng) || isNaN(radius) || lat < -90 || lat > 90 || lng < -180 || lng > 180 || radius <= 0) {
+        if (!storeName || isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180 || radius <= 0) {
           errors.push(`Fila ${i+2}: Faltan datos o coords inválidas. Omitida.`);
           errorCount++;
           continue;
