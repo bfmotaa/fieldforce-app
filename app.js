@@ -1789,135 +1789,131 @@ function initSupervisorEvents() {
       const sSel = document.getElementById('route-store-select');
       if (!pSel || !sSel) return;
       
-      let promoterId = pSel.value;
-      if (promoterId === 'new') {
+      let promoterName = pSel.options[pSel.selectedIndex]?.text || '';
+      let storeName = sSel.options[sSel.selectedIndex]?.text || '';
+      
+      let storeLat = 0;
+      let storeLng = 0;
+      let storeAddress = 'Manual';
+
+      if (pSel.value === 'new') {
         const newNameInput = document.getElementById('new-promoter-name');
-        const newName = newNameInput ? newNameInput.value.trim() : '';
-        if (!newName) return;
-        promoterId = `promoter-${Date.now()}`;
-        const initials = newName.split(' ').filter(n => n).map(n => n[0]).join('').toUpperCase().substring(0, 2);
-        db.promoters[promoterId] = {
-          id: promoterId,
-          name: newName,
-          avatar: initials
-        };
+        promoterName = newNameInput ? newNameInput.value.trim() : '';
+        if (!promoterName) return;
       }
       
-      let storeId = sSel.value;
-      if (storeId === 'new') {
+      if (sSel.value === 'new') {
         const newNameInput = document.getElementById('new-store-name');
         const newAddrInput = document.getElementById('new-store-address');
         const newLatInput = document.getElementById('new-store-lat');
         const newLngInput = document.getElementById('new-store-lng');
         
-        const newName = newNameInput ? newNameInput.value.trim() : '';
-        const newAddr = newAddrInput ? newAddrInput.value.trim() : '';
-        const newLat = newLatInput ? parseFloat(newLatInput.value) : NaN;
-        const newLng = newLngInput ? parseFloat(newLngInput.value) : NaN;
+        storeName = newNameInput ? newNameInput.value.trim() : '';
+        storeAddress = newAddrInput ? newAddrInput.value.trim() : 'Manual';
+        storeLat = newLatInput ? parseFloat(newLatInput.value) : 0;
+        storeLng = newLngInput ? parseFloat(newLngInput.value) : 0;
         
-        if (!newName || !newAddr) return;
-        if (isNaN(newLat) || isNaN(newLng)) {
+        if (!storeName || !storeAddress) return;
+        if (isNaN(storeLat) || isNaN(storeLng)) {
           alert("Debes proporcionar Latitud y Longitud válidas para crear una nueva tienda.");
           return;
         }
-        
-        const btnSubmit = manualForm.querySelector('button[type="submit"]');
-        if (btnSubmit) btnSubmit.disabled = true;
-        
-        try {
-          const res = await window.ApiService.createStore({
-            clientId: window.selectedClientId || 'demo-client',
-            storeCode: `TMP-${Date.now()}`, // Temporary code for quick creation
-            chain: 'Independiente',
-            storeName: newName,
-            address: newAddr,
-            city: '',
-            state: '',
-            latitude: newLat,
-            longitude: newLng,
-            geofenceRadius: 100,
-            status: 'active'
-          });
-          
-          if (res && res.success && res.data && res.data.storeId) {
-            storeId = res.data.storeId;
-            db.stores[storeId] = {
-              id: storeId,
-              name: newName,
-              address: newAddr,
-              lat: newLat,
-              lng: newLng
-            };
-          } else {
-            alert('Error al crear tienda en la nube: ' + (res?.error?.message || 'Error desconocido'));
-            if (btnSubmit) btnSubmit.disabled = false;
-            return;
-          }
-        } catch (err) {
-          alert('Error de conexión al crear tienda rápida: ' + err.message);
-          if (btnSubmit) btnSubmit.disabled = false;
-          return;
-        } finally {
-          if (btnSubmit) btnSubmit.disabled = false;
+      } else {
+        const existingStore = db.stores[sSel.value];
+        if (existingStore) {
+            storeAddress = existingStore.address || 'Manual';
+            storeLat = existingStore.lat || 0;
+            storeLng = existingStore.lng || 0;
         }
       }
-      
+
       const dateInput = document.getElementById('route-date-input');
       const date = dateInput ? dateInput.value : '';
       if (!date) return;
       
-      // Check if assignment exists
-      const exists = db.routes.some(r => r.promoterId === promoterId && r.storeId === storeId && r.date === date);
-      if (exists) {
-        alert("Esta tienda ya está asignada a este promotor en esa fecha.");
-        return;
+      const btnSubmit = manualForm.querySelector('button[type="submit"]');
+      const originalText = btnSubmit ? btnSubmit.innerHTML : '';
+      if (btnSubmit) {
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = '<i data-lucide="loader" class="spin"></i> Asignando...';
+        if (window.lucide) window.lucide.createIcons();
       }
-      
-      const formSelectEl = document.getElementById('route-form-select');
-      const selectedFormIds = formSelectEl
-        ? Array.from(formSelectEl.selectedOptions)
-            .map(o => o.value)
-            .filter(v => v !== 'default')
-        : [];
-      db.routes.push({
-        id: `route-${Date.now()}`,
-        promoterId: promoterId,
-        storeId: storeId,
-        date: date,
-        status: 'pendiente',
-        checkIn: null,
-        checkOut: null,
-        data: null,
-        formIds: selectedFormIds
-      });
-      
-      saveDB();
-      
-      // Reset form layout
-      if (newPromoterGroup) newPromoterGroup.classList.add('hidden');
-      if (newStoreInputs) newStoreInputs.classList.add('hidden');
-      
-      const newPromoterName = document.getElementById('new-promoter-name');
-      const newStoreName = document.getElementById('new-store-name');
-      const newStoreAddress = document.getElementById('new-store-address');
-      const newStoreLat = document.getElementById('new-store-lat');
-      const newStoreLng = document.getElementById('new-store-lng');
-      
-      if (newPromoterName) newPromoterName.required = false;
-      if (newStoreName) newStoreName.required = false;
-      if (newStoreAddress) newStoreAddress.required = false;
-      if (newStoreLat) newStoreLat.required = false;
-      if (newStoreLng) newStoreLng.required = false;
-      
-      manualForm.reset();
-      
-      populateManualAssignmentDropdowns();
-      renderMobilePromoterDropdown();
-      renderRoutePlanner();
-      renderRouteList();
-      updateSupervisorDashboard();
-      
-      alert("Asignación de ruta manual guardada con éxito.");
+
+      try {
+        if (window.ApiService && window.ApiService.uploadRoutes) {
+          const result = await window.ApiService.uploadRoutes([{
+            promoterName: promoterName,
+            storeName: storeName,
+            storeAddress: storeAddress,
+            date: date,
+            lat: storeLat,
+            lng: storeLng
+          }]);
+          
+          if (!result.success && !result._offline) {
+            throw new Error(result.error ? result.error.message : 'Error al sincronizar con la nube.');
+          }
+        }
+        
+        alert("Ruta asignada en la nube. Actualizando catálogos locales...");
+
+        try {
+          const storesRes = await window.ApiService.getStores(window.selectedClientId || 'demo-client');
+          if (storesRes && storesRes.success) {
+            storesRes.data.forEach(s => {
+              const norm = normalizeStore(s);
+              db.stores[norm.id] = norm;
+            });
+          }
+          
+          const promotersRes = await window.ApiService.getPromoters();
+          if (promotersRes && promotersRes.success) {
+            promotersRes.data.forEach(p => {
+              db.promoters[p.id] = p;
+            });
+          }
+          saveDB();
+        } catch(err) {
+          console.warn("Fallo actualizando catálogo tras asignación manual:", err);
+        }
+
+        const newPromoterGroup = document.getElementById('new-promoter-group');
+        const newStoreInputs = document.getElementById('new-store-inputs');
+        
+        // Reset form layout
+        if (newPromoterGroup) newPromoterGroup.classList.add('hidden');
+        if (newStoreInputs) newStoreInputs.classList.add('hidden');
+        
+        const newPromoterName = document.getElementById('new-promoter-name');
+        const newStoreName = document.getElementById('new-store-name');
+        const newStoreAddress = document.getElementById('new-store-address');
+        const newStoreLat = document.getElementById('new-store-lat');
+        const newStoreLng = document.getElementById('new-store-lng');
+        
+        if (newPromoterName) newPromoterName.required = false;
+        if (newStoreName) newStoreName.required = false;
+        if (newStoreAddress) newStoreAddress.required = false;
+        if (newStoreLat) newStoreLat.required = false;
+        if (newStoreLng) newStoreLng.required = false;
+        
+        manualForm.reset();
+        
+        populateManualAssignmentDropdowns();
+        renderMobilePromoterDropdown();
+        renderRoutePlanner();
+        renderRouteList();
+        updateSupervisorDashboard();
+        
+        alert("Asignación de ruta manual guardada y sincronizada con éxito.");
+      } catch (err) {
+        alert("Error de conexión al asignar ruta: " + err.message);
+      } finally {
+        if (btnSubmit) {
+          btnSubmit.disabled = false;
+          btnSubmit.innerHTML = originalText;
+          if (window.lucide) window.lucide.createIcons();
+        }
+      }
     });
   }
 }
