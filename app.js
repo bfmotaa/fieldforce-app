@@ -4925,11 +4925,69 @@ async function executeGPSCheckin() {
     if (sessionStr) {
       try {
         const s = JSON.parse(sessionStr);
-        if (s && s.user && s.user.userId) {
-          realPromoterId = s.user.userId;
+        if (s && s.user) {
+          realPromoterId = s.user.userId || s.user.id || s.user.promoterId;
         }
       } catch(e) {}
     }
+
+    if (!realPromoterId && route && route.promoterId) {
+      realPromoterId = route.promoterId;
+    }
+
+    const finalRouteId = route.routeId;
+    const finalRouteStoreId = route.id;
+    const finalStoreId = store.storeId || store.id || route.storeId;
+
+    if (!realPromoterId || !finalRouteId || !finalRouteStoreId || !finalStoreId) {
+      throw new Error(`Datos de ruta incompletos. P=${realPromoterId || 'null'}, R=${finalRouteId || 'null'}, RS=${finalRouteStoreId || 'null'}, S=${finalStoreId || 'null'}. Sincroniza e intenta nuevamente.`);
+    }
+    
+    // Attempt check-in with ApiService
+    const visitData = {
+      visitId: window.ApiService._generateUUID ? window.ApiService._generateUUID() : crypto.randomUUID(),
+      routeId: finalRouteId,
+      routeStoreId: finalRouteStoreId,
+      storeId: finalStoreId,
+      promoterId: realPromoterId,
+      clientId: store.clientId || 'demo-client',
+      latitude: position.latitude,
+      longitude: position.longitude,
+      accuracy: position.accuracy,
+      distanceToStore: distance,
+      geofenceValid: isValid,
+      locationSource: 'device_gps',
+      createdOfflineAt: new Date().toISOString()
+    };
+    
+    if (isValid) {
+      const checkInResult = await window.ApiService.checkIn(visitData);
+      if (checkInResult && checkInResult.success && window.SyncQueue) {
+        await window.SyncQueue.waitForVisitSync(visitData.visitId, 10);
+      }
+      if (checkInResult && checkInResult.success) {
+        route.status = 'en_visita'; 
+        route.visitId = visitData.visitId; // Required for operations later
+        localStorage.setItem('fieldflow_db', JSON.stringify(db));
+        document.getElementById('btn-confirm-checkin').classList.remove('hidden');
+      } else {
+        throw new Error("Falla al guardar la visita. Intenta nuevamente.");
+      }
+    } else {
+       document.getElementById('btn-retry-checkin').classList.remove('hidden');
+    }
+  } catch (err) {
+     document.getElementById('checkin-loading').classList.add('hidden');
+     document.getElementById('checkin-results').classList.remove('hidden');
+     const banner = document.getElementById('checkin-status-banner');
+     banner.textContent = `Error: ${err.message}`;
+     banner.style.backgroundColor = 'var(--warning-color)';
+     banner.style.color = '#333';
+     document.getElementById('checkin-accuracy').textContent = '-- m';
+     document.getElementById('checkin-distance').textContent = '-- m';
+     document.getElementById('btn-retry-checkin').classList.remove('hidden');
+  }
+}
 
     const finalRouteId = route.routeId;
     const finalRouteStoreId = route.id;
