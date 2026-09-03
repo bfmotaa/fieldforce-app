@@ -3093,71 +3093,33 @@ async function confirmImportedRoutes() {
       }
     }
 
-    // 2. Guardar localmente para actualizar la UI inmediatamente
-    pendingImportRoutes.forEach(imp => {
-      // Resolve promoter
-      let promoterId = null;
-      const existingPromoter = Object.values(db.promoters).find(p => p.name.toLowerCase() === imp.promoterName.toLowerCase());
-      if (existingPromoter) {
-        promoterId = existingPromoter.id;
-      } else {
-        promoterId = `promoter-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-        const initials = imp.promoterName.split(' ').filter(n => n).map(n => n[0]).join('').toUpperCase().substring(0, 2);
-        db.promoters[promoterId] = {
-          id: promoterId,
-          name: imp.promoterName,
-          avatar: initials
-        };
-      }
-      
-      // Resolve store
-      let storeId = null;
-      const existingStore = Object.values(db.stores).find(s => s.name.toLowerCase() === imp.storeName.toLowerCase());
-      if (existingStore) {
-        storeId = existingStore.id;
-        if (imp.lat !== undefined && imp.lng !== undefined) {
-          existingStore.lat = imp.lat;
-          existingStore.lng = imp.lng;
-        }
-      } else {
-        storeId = `store-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-        db.stores[storeId] = {
-          id: storeId,
-          name: imp.storeName,
-          address: imp.storeAddress,
-          lat: imp.lat,
-          lng: imp.lng
-        };
-      }
-      
-      // Register route assignment if it doesn't exist
-      const exists = db.routes.some(r => r.promoterId === promoterId && r.storeId === storeId && r.date === imp.date);
-      if (!exists) {
-        db.routes.push({
-          id: `route-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          promoterId: promoterId,
-          storeId: storeId,
-          date: imp.date,
-          status: 'pendiente',
-          checkIn: null,
-          checkOut: null,
-          data: null,
-          formIds: []
-        });
-        addedCount++;
-      } else {
-        skippedCount++;
-      }
-    });
-    
-    saveDB();
-    
-    alert(`Carga finalizada y sincronizada con la nube.\nSe agregaron ${addedCount} asignaciones de ruta. (${skippedCount} duplicados ignorados).`);
+    // 2. No guardar rutas localmente con IDs falsos. Sincronizar catálogo.
+    alert(`Carga enviada a la nube. Actualizando catálogo de tiendas y promotores...`);
     
     pendingImportRoutes = [];
     document.getElementById('import-preview-container').classList.add('hidden');
     document.getElementById('routes-copy-paste').value = '';
     document.getElementById('routes-file-input').value = '';
+    
+    try {
+      const storesRes = await ApiService.getStores(window.selectedClientId || 'demo-client');
+      if (storesRes && storesRes.success) {
+        storesRes.data.forEach(s => {
+          const norm = normalizeStore(s);
+          db.stores[norm.id] = norm;
+        });
+      }
+      
+      const promotersRes = await ApiService.getPromoters();
+      if (promotersRes && promotersRes.success) {
+        promotersRes.data.forEach(p => {
+          db.promoters[p.id] = p;
+        });
+      }
+      saveDB();
+    } catch(err) {
+      console.warn("Fallo actualizando catálogo tras importación:", err);
+    }
     
     populateManualAssignmentDropdowns();
     renderMobilePromoterDropdown();
@@ -3165,6 +3127,8 @@ async function confirmImportedRoutes() {
     renderRouteList();
     updateSupervisorDashboard();
     renderCentralConsole();
+
+    alert(`Carga finalizada y base de datos local sincronizada.`);
 
   } catch (error) {
     alert(`Ocurrió un error al cargar las rutas en la nube: ${error.message}\nVerifique su conexión.`);
@@ -3459,6 +3423,9 @@ function initAuthAndConsole() {
         if (result.success) {
           // Success
           console.log("Login success, checking auth...");
+          // CRITICAL FIX: Clear local db on login to wipe any garbage local IDs generated during upload
+          localStorage.removeItem('fieldflow_db');
+          db = { stores: {}, promoters: {}, routes: [], visits: [] };
           loginForm.reset();
           await checkAuth();
           console.log("checkAuth completed");
@@ -4941,60 +4908,6 @@ async function executeGPSCheckin() {
 
     if (!realPromoterId || !finalRouteId || !finalRouteStoreId || !finalStoreId) {
       throw new Error(`Datos de ruta incompletos. P=${realPromoterId || 'null'}, R=${finalRouteId || 'null'}, RS=${finalRouteStoreId || 'null'}, S=${finalStoreId || 'null'}. Sincroniza e intenta nuevamente.`);
-    }
-    
-    // Attempt check-in with ApiService
-    const visitData = {
-      visitId: window.ApiService._generateUUID ? window.ApiService._generateUUID() : crypto.randomUUID(),
-      routeId: finalRouteId,
-      routeStoreId: finalRouteStoreId,
-      storeId: finalStoreId,
-      promoterId: realPromoterId,
-      clientId: store.clientId || 'demo-client',
-      latitude: position.latitude,
-      longitude: position.longitude,
-      accuracy: position.accuracy,
-      distanceToStore: distance,
-      geofenceValid: isValid,
-      locationSource: 'device_gps',
-      createdOfflineAt: new Date().toISOString()
-    };
-    
-    if (isValid) {
-      const checkInResult = await window.ApiService.checkIn(visitData);
-      if (checkInResult && checkInResult.success && window.SyncQueue) {
-        await window.SyncQueue.waitForVisitSync(visitData.visitId, 10);
-      }
-      if (checkInResult && checkInResult.success) {
-        route.status = 'en_visita'; 
-        route.visitId = visitData.visitId; // Required for operations later
-        localStorage.setItem('fieldflow_db', JSON.stringify(db));
-        document.getElementById('btn-confirm-checkin').classList.remove('hidden');
-      } else {
-        throw new Error("Falla al guardar la visita. Intenta nuevamente.");
-      }
-    } else {
-       document.getElementById('btn-retry-checkin').classList.remove('hidden');
-    }
-  } catch (err) {
-     document.getElementById('checkin-loading').classList.add('hidden');
-     document.getElementById('checkin-results').classList.remove('hidden');
-     const banner = document.getElementById('checkin-status-banner');
-     banner.textContent = `Error: ${err.message}`;
-     banner.style.backgroundColor = 'var(--warning-color)';
-     banner.style.color = '#333';
-     document.getElementById('checkin-accuracy').textContent = '-- m';
-     document.getElementById('checkin-distance').textContent = '-- m';
-     document.getElementById('btn-retry-checkin').classList.remove('hidden');
-  }
-}
-
-    const finalRouteId = route.routeId;
-    const finalRouteStoreId = route.id;
-    const finalStoreId = store.storeId || store.id || route.storeId;
-
-    if (!realPromoterId || !finalRouteId || !finalRouteStoreId || !finalStoreId) {
-      throw new Error("Datos de ruta incompletos. Por favor sincroniza tus rutas e intenta nuevamente.");
     }
     
     // Attempt check-in with ApiService
