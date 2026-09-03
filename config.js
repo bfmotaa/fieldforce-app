@@ -33,7 +33,7 @@ const FIELDFORCE_CONFIG = Object.freeze({
    * Reemplazar con la URL real generada en el deploy del script.
    * Ver: docs/FASE_1_CONFIGURACION_GOOGLE.md — Paso 4: Deploy del script
    */
-  appsScriptUrl: 'https://script.google.com/macros/s/AKfycbzizhCOuT5fcK6GyDHRhAG8_sRxJBK01m_d0ywc350z6dQDc71SuRpvGK_oCQwHF9LHEw/exec',
+  appsScriptUrl: 'https://script.google.com/macros/s/AKfycby47gaS53Os38pEZUttW-eMC4ymrp5nFBjBqXZ4Tvs2TExpdDzeZRxZnx5CdXehYNKzzQ/exec',
 
   /** Versión de la aplicación */
   version: '1.0.0-phase1',
