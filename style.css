@@ -1,5 +1,5 @@
 /* ==========================================================================
-   FIELDFLOW DESIGN SYSTEM & STYLESHEET (style.css)
+     FIELDFLOW DESIGN SYSTEM & STYLESHEET (style.css)
    ========================================================================== */
 
 /* 1. Design Tokens & Core Settings */
@@ -296,6 +296,9 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   border-radius: var(--border-radius-sm);
   padding: 0.75rem 1.25rem;
+  box-sizing: border-box;
+  white-space: normal;
+  text-align: center;
   cursor: pointer;
   transition: var(--transition-fast);
   border: 1px solid transparent;
@@ -3333,4 +3336,61 @@ input:checked + .slider:before {
 
 .btn-store-history svg { width: 13px; height: 13px; }
 
-
+/* ----------------------------------------------------
+   Mobile / PWA Responsiveness
+---------------------------------------------------- */
+@media (max-width: 768px) {
+  /* Hides the global header completely for a more native app feel */
+  body.role-promoter .global-header {
+    display: none !important;
+  }
+  
+  /* Reset simulator wrapper constraints */
+  .simulator-wrapper {
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 0 !important;
+    max-width: 100% !important;
+    height: 100vh !important;
+  }
+  
+  /* Hide the right-side instructions */
+  .simulator-instructions {
+    display: none !important;
+  }
+  
+  /* Strip the phone hardware frame styling */
+  .phone-frame {
+    width: 100% !important;
+    height: 100% !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    background-color: var(--bg-body) !important;
+  }
+  
+  .phone-speaker {
+    display: none !important;
+  }
+  
+  /* Make screen full bleed */
+  .phone-screen {
+    width: 100% !important;
+    height: 100% !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+  
+  /* Remove rounded corners from login wrapper so it fits full screen nicely too */
+  .login-card {
+    border-radius: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+}
+\n```
