@@ -1,5 +1,4 @@
-/**
- * =============================================================================
+ /** =============================================================================
  * FIELDFORCE — API SERVICE (Capa de Abstracción)
  * =============================================================================
  *
@@ -487,6 +486,27 @@ const ApiService = (() => {
    */
   async function getUsers() {
     return await _post('getUsers');
+  }
+
+  /**
+   * Lista todos los promotores adaptando la respuesta de getUsers
+   * para compatibilidad con la interfaz web.
+   * @returns {Promise<Object>}
+   */
+  async function getPromoters() {
+    const res = await getUsers();
+    if (res.success && res.data) {
+      const promoters = res.data
+        .filter(u => u.role === 'promoter')
+        .map(u => ({
+          id: u.userId,
+          name: u.fullName || u.username,
+          avatar: (u.fullName || u.username).substring(0,2).toUpperCase(),
+          role: u.role
+        }));
+      return { success: true, data: promoters };
+    }
+    return res;
   }
 
   /**
@@ -1128,6 +1148,7 @@ const ApiService = (() => {
     adminCreateUser,
     adminResetPassword,
     getUsers,
+    getPromoters,
     adminActivateUser,
     adminDeactivateUser,
     adminUnlockUser,
@@ -1182,3 +1203,4 @@ const ApiService = (() => {
 })();
 
 window.ApiService = ApiService;
+\n```
