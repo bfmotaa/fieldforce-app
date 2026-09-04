@@ -643,8 +643,6 @@ function initNavigation() {
   const btnPlanner = document.getElementById('btn-planner');
   const btnForms = document.getElementById('btn-forms');
   const btnConsole = document.getElementById('btn-console');
-  const btnReset = document.getElementById('btn-reset');
-  
   if (btnPromotor) {
     btnPromotor.addEventListener('click', () => {
       setActiveView('promotor');
@@ -668,14 +666,6 @@ function initNavigation() {
   if (btnConsole) {
     btnConsole.addEventListener('click', () => {
       setActiveView('console');
-    });
-  }
-  
-  if (btnReset) {
-    btnReset.addEventListener('click', () => {
-      if (confirm("¿Estás seguro de que deseas borrar el historial y reiniciar el piloto?")) {
-        resetDB();
-      }
     });
   }
 }
@@ -3098,6 +3088,36 @@ async function confirmImportedRoutes() {
   }
 
   try {
+    // 0. Workaround for backend bug: Pre-create missing stores properly or update corrupted ones
+    if (window.ApiService && window.ApiService.createStore && window.ApiService.updateStore) {
+      const uniqueStores = [...new Map(pendingImportRoutes.map(item => [item.storeName, item])).values()];
+      for (const s of uniqueStores) {
+        try {
+          const existingStore = Object.values(db.stores).find(store => store.name === s.storeName);
+          if (existingStore) {
+            await window.ApiService.updateStore(existingStore.id, {
+              latitude: s.lat,
+              longitude: s.lng,
+              geofenceRadius: 100
+            });
+          } else {
+            await window.ApiService.createStore({
+              clientId: window.selectedClientId || 'CLIENT_DEMO',
+              storeCode: `ST-${Math.floor(Math.random()*10000)}`,
+              storeName: s.storeName,
+              address: s.storeAddress,
+              latitude: s.lat,
+              longitude: s.lng,
+              geofenceRadius: 100,
+              status: 'active'
+            });
+          }
+        } catch (e) {
+          // ignore error if network fails, let backend handle fallback
+        }
+      }
+    }
+
     // 1. Enviar a la nube a través de la API
     if (window.ApiService && window.ApiService.uploadRoutes) {
       const result = await window.ApiService.uploadRoutes(pendingImportRoutes);
@@ -5242,3 +5262,4 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
+\n```
