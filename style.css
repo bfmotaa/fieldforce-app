@@ -1,5 +1,5 @@
 /* ==========================================================================
-     FIELDFLOW DESIGN SYSTEM & STYLESHEET (style.css)
+   FIELDFLOW DESIGN SYSTEM & STYLESHEET (style.css)
    ========================================================================== */
 
 /* 1. Design Tokens & Core Settings */
@@ -3393,4 +3393,3 @@ input:checked + .slider:before {
     justify-content: center;
   }
 }
-\n```
