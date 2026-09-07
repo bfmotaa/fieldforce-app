@@ -718,7 +718,7 @@ function renderRouteList() {
   let completedCount = 0;
   
   // Filter routes assigned to this promoter on this date
-  const routesForDay = db.routes.filter(r => r.promoterId === selectedPromoterId && r.date === selectedDate);
+  const routesForDay = (db.routes || []).filter(r => r.promoterId === selectedPromoterId && r.date === selectedDate);
   
   if (routesForDay.length === 0) {
     container.innerHTML = `
@@ -1642,7 +1642,7 @@ function renderAlertsList() {
   container.innerHTML = '';
   
   // Filter alerts based on active selection
-  const filteredAlerts = db.alerts.filter(alert => {
+  const filteredAlerts = (db.alerts || []).filter(alert => {
     if (activeAlertFilter === 'all') return true;
     return alert.severity === activeAlertFilter;
   });
@@ -1860,7 +1860,7 @@ function initSupervisorEvents() {
           
           const routeRes = await window.ApiService.getTodayRoute(promoterId, date);
           if (routeRes && routeRes.success && routeRes.data && routeRes.data.hasRoute) {
-            db.routes = db.routes.filter(r => !(String(r.promoterId) === String(promoterId) && r.date === date));
+            db.routes = (db.routes || []).filter(r => !(String(r.promoterId) === String(promoterId) && r.date === date));
             routeRes.data.stores.forEach(storeObj => {
               db.routes.push({
                 id: storeObj.routeStoreId,
@@ -2012,7 +2012,7 @@ function renderStoreSummaryList() {
   container.innerHTML = '';
 
   stores.forEach(store => {
-    const visitCount = db.visits.filter(v => v.storeId === store.id).length;
+    const visitCount = (db.visits || []).filter(v => v.storeId === store.id).length;
     const badge = visitCount > 0
       ? `<span class="store-summary-badge">${visitCount} ${visitCount === 1 ? 'visita' : 'visitas'}</span>`
       : `<span class="store-summary-badge zero">Sin visitas</span>`;
@@ -2046,7 +2046,7 @@ function openStoreHistory(storeId) {
   const dialog = document.getElementById('store-history-dialog');
   if (!dialog) return;
 
-  const storeVisits = db.visits
+  const storeVisits = (db.visits || [])
     .filter(v => v.storeId === storeId)
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
@@ -2653,7 +2653,7 @@ function renderRoutePlanner() {
   container.innerHTML = '';
   
   // Group routes by promoter for this date
-  const routesForDate = db.routes.filter(r => r.date === dateFilter);
+  const routesForDate = (db.routes || []).filter(r => r.date === dateFilter);
   
   if (routesForDate.length === 0) {
     container.innerHTML = `
@@ -2758,7 +2758,7 @@ function formatDateString(dateStr) {
 }
 
 function deleteRouteAssignment(routeId) {
-  db.routes = db.routes.filter(r => r.id !== routeId);
+  db.routes = (db.routes || []).filter(r => r.id !== routeId);
   saveDB();
   renderRoutePlanner();
   renderRouteList();
@@ -3307,7 +3307,7 @@ async function checkAuth() {
         : selectedDate;
       const routeRes = await window.ApiService.getTodayRoute(selectedPromoterId, routeLookupDate);
       if (routeRes.success && routeRes.data && routeRes.data.hasRoute) {
-        db.routes = db.routes.filter(r => !(r.promoterId === selectedPromoterId && r.date === selectedDate));
+        db.routes = (db.routes || []).filter(r => !(r.promoterId === selectedPromoterId && r.date === selectedDate));
         
         routeRes.data.stores.forEach(storeObj => {
           db.routes.push({
@@ -3324,7 +3324,7 @@ async function checkAuth() {
           });
         });
       } else {
-        db.routes = db.routes.filter(r => !(r.promoterId === selectedPromoterId && r.date === selectedDate));
+        db.routes = (db.routes || []).filter(r => !(r.promoterId === selectedPromoterId && r.date === selectedDate));
       }
       
       // Fetch Real Stores Catalog
@@ -3709,7 +3709,7 @@ function renderCentralConsole() {
             if (u.role === 'promoter' && u.promoterId) {
               delete db.promoters[u.promoterId];
               // clean routes assigned to deleted promoter
-              db.routes = db.routes.filter(r => r.promoterId !== u.promoterId);
+              db.routes = (db.routes || []).filter(r => r.promoterId !== u.promoterId);
             }
             
             delete db.users[u.username];
@@ -3765,7 +3765,7 @@ function renderCentralConsole() {
         btnDel.addEventListener('click', () => {
           if (confirm(`¿Estás seguro de eliminar la tienda "${store.name}"?`)) {
             // Clean routes assigned to deleted store
-            db.routes = db.routes.filter(r => r.storeId !== store.id);
+            db.routes = (db.routes || []).filter(r => r.storeId !== store.id);
             
             delete db.stores[store.id];
             saveDB();
