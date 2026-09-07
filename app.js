@@ -40,6 +40,8 @@ function normalizeStore(s) {
     state: s.state,
     latitude: s.latitude,
     longitude: s.longitude,
+    lat: s.latitude || s.lat,
+    lng: s.longitude || s.lng,
     geofenceRadius: s.geofenceRadius || s.geofence_radius,
     clientId: s.clientId || s.client_id,
     status: s.status
@@ -5262,4 +5264,3 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
-\n```
