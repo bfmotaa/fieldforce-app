@@ -78,6 +78,50 @@ async function loadStoresForClient(clientId) {
   }
 }
 
+
+
+async function loadAllRoutes(clientId) {
+  try {
+    const routeRes = await window.ApiService.getRoutes(clientId);
+    if (routeRes && routeRes.success && Array.isArray(routeRes.data)) {
+      // The backend now returns a flat array of all route stores (assignments) for the client.
+      db.routes = routeRes.data.map(storeObj => ({
+        id: storeObj.routeStoreId,
+        routeId: storeObj.routeId,
+        promoterId: storeObj.promoterId,
+        storeId: storeObj.storeId,
+        date: storeObj.date,
+        status: storeObj.status === 'completed' ? 'completado' : 'pendiente',
+        formIds: storeObj.assignedForms || [],
+        visitOrder: storeObj.visitOrder || 999,
+        scheduledStart: storeObj.scheduledStart || '--:--',
+        scheduledEnd: storeObj.scheduledEnd || '--:--'
+      }));
+      return true;
+    }
+  } catch (e) {
+    console.error("Excepción al cargar todas las rutas:", e);
+  }
+  return false;
+}
+
+async function loadPromoters() {
+  try {
+    const promotersRes = await window.ApiService.getPromoters();
+    if (promotersRes && promotersRes.success && Array.isArray(promotersRes.data)) {
+      const realPromoters = {};
+      promotersRes.data.forEach(p => {
+        realPromoters[p.id] = p;
+      });
+      db.promoters = { ...db.promoters, ...realPromoters };
+      return true;
+    }
+  } catch (e) {
+    console.error("Excepción al cargar promotores:", e);
+  }
+  return false;
+}
+
 async function loadFormsFromBackend() {
   try {
     const formsRes = await window.ApiService.getForms();
@@ -364,15 +408,51 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (mobileDateSelect) {
     const todayStr = getLocalDateString();
     
-    // Generar opciones dinámicas: Solo mostrar "Hoy" para el promotor. 
-    // Para simplificar, forzaremos a que siempre sea la fecha seleccionada.
-    mobileDateSelect.innerHTML = `<option value="${todayStr}">Hoy (${todayStr.substring(8,10)}/${todayStr.substring(5,7)})</option>`;
-    mobileDateSelect.value = todayStr;
-    selectedDate = todayStr; // Forzar a hoy en vista promotor
+    // Generate dynamic options: 7 days in the past, today, and 7 days in the future
+    let optionsHTML = '';
+    for (let i = -7; i <= 7; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      const isoDate = d.toISOString().split('T')[0];
+      const displayDate = i === 0 ? `Hoy (${isoDate.substring(8,10)}/${isoDate.substring(5,7)})` : `${isoDate.substring(8,10)}/${isoDate.substring(5,7)}`;
+      optionsHTML += `<option value="${isoDate}">${displayDate}</option>`;
+    }
     
-    mobileDateSelect.addEventListener('change', () => {
+    mobileDateSelect.innerHTML = optionsHTML;
+    mobileDateSelect.value = todayStr;
+    selectedDate = todayStr; // Forzar a hoy inicialmente en vista promotor
+    
+    mobileDateSelect.addEventListener('change', async () => {
       selectedDate = mobileDateSelect.value;
-      renderRouteList();
+      const btnConfirm = document.getElementById('mobile-date-select');
+      btnConfirm.disabled = true;
+      try {
+        const routeRes = await window.ApiService.getTodayRoute(selectedPromoterId, selectedDate);
+        if (routeRes.success && routeRes.data && routeRes.data.hasRoute) {
+          // Clear any local routes for this promoter+date and replace with fetched ones
+          db.routes = (db.routes || []).filter(r => !(r.promoterId === selectedPromoterId && r.date === selectedDate));
+          
+          routeRes.data.stores.forEach(storeObj => {
+            db.routes.push({
+              id: storeObj.routeStoreId,
+              routeId: storeObj.routeId,
+              promoterId: selectedPromoterId,
+              storeId: storeObj.storeId,
+              date: selectedDate,
+              status: storeObj.status === 'completed' ? 'completado' : 'pendiente',
+              formIds: (storeObj.routeId === '5f128eb3-f9bf-4d4d-8c4d-7538e1e868ac' || storeObj.routeStoreId === '3bb0e24e-2eb3-4b72-ad47-94bceef0dd49') ? ['form-exhibidor-demo'] : (storeObj.assignedForms || []),
+              visitOrder: storeObj.visitOrder || 999,
+              scheduledStart: storeObj.scheduledStart || '--:--',
+              scheduledEnd: storeObj.scheduledEnd || '--:--'
+            });
+          });
+        }
+      } catch (e) {
+        console.error("Error fetching route for selected date", e);
+      } finally {
+        btnConfirm.disabled = false;
+        renderRouteList();
+      }
     });
   }
   
@@ -3156,6 +3236,45 @@ async function confirmImportedRoutes() {
       console.warn("Fallo actualizando catálogo tras importación:", err);
     }
     
+    // Restaurar rutas localmente para que se vean en la web inmediatamente sin tener que refrescar
+    // ya que la API actual de Apps Script no nos devuelve el catálogo completo de rutas por tienda
+    let addedCount = 0;
+    let skippedCount = 0;
+    
+    pendingImportRoutes.forEach(imp => {
+      // Find promoter
+      const promoter = Object.values(db.promoters).find(p => p.name === imp.promoterName);
+      const promoterId = promoter ? promoter.id : null;
+      
+      // Find store
+      const store = Object.values(db.stores).find(s => s.name === imp.storeName);
+      const storeId = store ? store.id : null;
+      
+      if (promoterId && storeId) {
+        db.routes = db.routes || [];
+        const exists = db.routes.some(r => r.promoterId === promoterId && r.storeId === storeId && r.date === imp.date);
+        if (!exists) {
+          db.routes.push({
+            id: `route-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            promoterId: promoterId,
+            storeId: storeId,
+            date: imp.date,
+            status: 'pendiente',
+            checkIn: null,
+            checkOut: null,
+            data: null,
+            formIds: []
+          });
+          addedCount++;
+        } else {
+          skippedCount++;
+        }
+      }
+    });
+    
+    saveDB();
+    console.log(`Rutas agregadas localmente: ${addedCount}, omitidas (duplicadas): ${skippedCount}`);
+    
     populateManualAssignmentDropdowns();
     renderMobilePromoterDropdown();
     renderRoutePlanner();
@@ -3432,8 +3551,10 @@ async function checkAuth() {
     }
     
     if (window.selectedClientId) {
-      let success = await loadStoresForClient(window.selectedClientId);
-      if (success && typeof renderCentralConsole === 'function') {
+      await loadStoresForClient(window.selectedClientId);
+      await loadPromoters();
+      await loadAllRoutes(window.selectedClientId);
+      if (typeof renderCentralConsole === 'function') {
         renderCentralConsole();
       }
     }

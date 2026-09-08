@@ -3345,13 +3345,28 @@ input:checked + .slider:before {
     display: none !important;
   }
   
+  /* Prevent scroll bouncing and pull-to-refresh on mobile */
+  body.role-promoter {
+    overflow: hidden !important;
+    overscroll-behavior-y: none !important;
+    position: fixed;
+    width: 100%;
+    height: 100dvh;
+  }
+  
   /* Reset simulator wrapper constraints */
   .simulator-wrapper {
     margin: 0 !important;
     padding: 0 !important;
     gap: 0 !important;
     max-width: 100% !important;
-    height: 100vh !important;
+    height: 100dvh !important;
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden !important;
   }
   
   /* Hide the right-side instructions */
@@ -3361,13 +3376,14 @@ input:checked + .slider:before {
   
   /* Strip the phone hardware frame styling */
   .phone-frame {
-    width: 100% !important;
-    height: 100% !important;
+    width: 100vw !important;
+    height: 100dvh !important;
     border: none !important;
     border-radius: 0 !important;
     padding: 0 !important;
     box-shadow: none !important;
     background-color: var(--bg-body) !important;
+    transform: none !important;
   }
   
   .phone-speaker {
@@ -3380,6 +3396,7 @@ input:checked + .slider:before {
     height: 100% !important;
     border: none !important;
     border-radius: 0 !important;
+    overflow: hidden !important;
   }
   
   /* Remove rounded corners from login wrapper so it fits full screen nicely too */
